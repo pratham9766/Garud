@@ -68,6 +68,20 @@ GIMBAL_ROLL_MIN = -45
 GIMBAL_ROLL_MAX = 45
 
 # ---------------------------------------------------------------------------
+# Mapping / camera footprint model
+# ---------------------------------------------------------------------------
+# Approximate camera field of view. Tune these values for the actual lens.
+CAMERA_HORIZONTAL_FOV_DEG = 62.2
+CAMERA_VERTICAL_FOV_DEG = 48.8
+
+# Altitudes lower than this are ignored for footprint sizing to avoid zero-area
+# polygons when the payload has landed.
+MAPPING_MIN_FOOTPRINT_ALTITUDE_M = 2.0
+
+# Cell size for approximate unique coverage estimation.
+MAPPING_COVERAGE_GRID_M = 5.0
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 LOG_LEVEL = "INFO"

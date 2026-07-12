@@ -13,6 +13,7 @@ import pandas as pd
 import simplekml
 
 import config
+from mapping.coverage import build_image_footprints, estimate_coverage_area
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,33 @@ def generate_kml(
     line.coords = list(zip(df["longitude"], df["latitude"], df["baro_altitude"]))
     line.style.linestyle.color = simplekml.Color.blue
     line.style.linestyle.width = 3
+
+    footprints = build_image_footprints(df)
+    coverage = estimate_coverage_area(footprints)
+    kml.document.description = (
+        f"Images: {coverage['image_count']}\n"
+        f"Unique coverage estimate: {coverage['unique_area_m2']:.0f} m^2\n"
+        f"Overlap estimate: {coverage['overlap_area_m2']:.0f} m^2\n"
+        f"Coverage grid: {coverage['coverage_grid_m']:.1f} m"
+    )
+
+    # Estimated camera footprints
+    for footprint in footprints:
+        polygon = kml.newpolygon(name=f"Footprint: {footprint.image_name}")
+        polygon.outerboundaryis = [
+            (lon, lat, 0) for lat, lon in footprint.corners + [footprint.corners[0]]
+        ]
+        polygon.description = (
+            f"Image: {footprint.image_name}\n"
+            f"Altitude: {footprint.altitude_m:.1f} m\n"
+            f"Footprint: {footprint.width_m:.1f} m x {footprint.height_m:.1f} m\n"
+            f"Area: {footprint.area_m2:.0f} m^2"
+        )
+        polygon.style.polystyle.color = simplekml.Color.changealphaint(
+            45, simplekml.Color.blue
+        )
+        polygon.style.linestyle.color = simplekml.Color.blue
+        polygon.style.linestyle.width = 2
 
     # Image capture placemarks
     image_rows = df[

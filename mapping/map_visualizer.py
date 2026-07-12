@@ -13,6 +13,7 @@ import folium
 import pandas as pd
 
 import config
+from mapping.coverage import build_image_footprints, estimate_coverage_area
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ def generate_flight_map(
 
     Plots:
       - GPS path polyline
+      - Camera footprint polygons for each geotagged image
       - Markers at image capture points with popup details
 
     Args:
@@ -50,6 +52,8 @@ def generate_flight_map(
     center_lat = df["latitude"].mean()
     center_lon = df["longitude"].mean()
     fmap = folium.Map(location=[center_lat, center_lon], zoom_start=15)
+    footprints = build_image_footprints(df)
+    coverage = estimate_coverage_area(footprints)
 
     # Flight path line
     path_coords = df[["latitude", "longitude"]].values.tolist()
@@ -73,6 +77,27 @@ def generate_flight_map(
         icon=folium.Icon(color="red", icon="stop"),
     ).add_to(fmap)
 
+    footprint_group = folium.FeatureGroup(name="Estimated image footprints")
+    for footprint in footprints:
+        popup_html = (
+            f"<b>Image:</b> {footprint.image_name}<br>"
+            f"<b>Altitude:</b> {footprint.altitude_m:.1f} m<br>"
+            f"<b>Footprint:</b> {footprint.width_m:.1f} m x "
+            f"{footprint.height_m:.1f} m<br>"
+            f"<b>Area:</b> {footprint.area_m2:.0f} m^2"
+        )
+        folium.Polygon(
+            locations=footprint.corners,
+            color="#1f78b4",
+            weight=2,
+            fill=True,
+            fill_color="#1f78b4",
+            fill_opacity=0.18,
+            popup=folium.Popup(popup_html, max_width=320),
+            tooltip=f"Footprint: {footprint.image_name}",
+        ).add_to(footprint_group)
+    footprint_group.add_to(fmap)
+
     # Image capture markers
     image_rows = df[
         df["image_name"].notna() & (df["image_name"].astype(str).str.len() > 0)
@@ -91,6 +116,20 @@ def generate_flight_map(
             popup=folium.Popup(popup_html, max_width=300),
             icon=folium.Icon(color="orange", icon="camera"),
         ).add_to(fmap)
+
+    summary_html = (
+        "<div style='position: fixed; bottom: 24px; left: 24px; z-index: 9999; "
+        "background: white; padding: 10px 12px; border: 1px solid #999; "
+        "font-size: 13px; line-height: 1.35;'>"
+        "<b>Mapping summary</b><br>"
+        f"Images: {coverage['image_count']}<br>"
+        f"Unique coverage: {coverage['unique_area_m2']:.0f} m^2<br>"
+        f"Overlap estimate: {coverage['overlap_area_m2']:.0f} m^2<br>"
+        f"Grid: {coverage['coverage_grid_m']:.1f} m"
+        "</div>"
+    )
+    fmap.get_root().html.add_child(folium.Element(summary_html))
+    folium.LayerControl().add_to(fmap)
 
     fmap.save(str(output_path))
     logger.info("Flight map saved: %s", output_path)

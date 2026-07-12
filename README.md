@@ -18,12 +18,15 @@ tested without connected flight hardware.
 - CSV mission logging.
 - Interactive Folium HTML map export.
 - Google Earth compatible KML export.
+- Estimated camera ground footprints and unique coverage area.
 - Standalone hardware bring-up scripts for Raspberry Pi testing.
 
 ## Mapping Scope
 
-The implemented mapping is GPS flight-path mapping. It plots the payload path
-and geotagged image capture points from the CSV log.
+The implemented mapping is GPS flight-path mapping plus an estimated camera
+coverage model. It plots the payload path, geotagged image capture points, and
+estimated ground rectangles for each image based on altitude, yaw, and camera
+field-of-view.
 
 This repository does not yet implement orthomosaic generation, image stitching,
 SLAM, feature matching, or camera-to-ground projection.
@@ -159,6 +162,14 @@ XBEE_PORT = "/dev/ttyUSB1"
 
 Set `USE_MOCK_HARDWARE = False` only after real hardware drivers and device
 ports are ready.
+
+Mapping footprint settings:
+
+```python
+CAMERA_HORIZONTAL_FOV_DEG = 62.2
+CAMERA_VERTICAL_FOV_DEG = 48.8
+MAPPING_COVERAGE_GRID_M = 5.0
+```
 
 ## Documentation
 

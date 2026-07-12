@@ -27,6 +27,9 @@ After shutdown, the CSV log is used to create:
 - `data/maps/flight_path.html`
 - `data/maps/flight_path.kml`
 
+The mapping output includes the GPS path, image capture markers, estimated
+camera footprints, and an approximate unique coverage area.
+
 ## 2. Installation
 
 Open a terminal in the project folder:
@@ -88,6 +91,17 @@ ENABLE_MAPPING = True
 ENABLE_LOGGING = True
 ```
 
+Camera footprint settings:
+
+```python
+CAMERA_HORIZONTAL_FOV_DEG = 62.2
+CAMERA_VERTICAL_FOV_DEG = 48.8
+MAPPING_MIN_FOOTPRINT_ALTITUDE_M = 2.0
+MAPPING_COVERAGE_GRID_M = 5.0
+```
+
+Tune field-of-view values after the final camera and lens are selected.
+
 ## 4. Simulation Workflow
 
 Use simulation mode before connecting hardware.
@@ -103,6 +117,7 @@ Expected result:
 - Synthetic CSV log is written under `data/logs/`.
 - HTML map is written to `data/maps/flight_path.html`.
 - KML file is written to `data/maps/flight_path.kml`.
+- Image footprint polygons and coverage estimates are included in the outputs.
 
 Run the full simulation:
 
@@ -257,3 +272,28 @@ No telemetry:
 - Keep CSV column names stable because mapping and telemetry depend on them.
 - Extend mapping carefully; current mapping is GPS path visualization, not image
   stitching or orthomosaic generation.
+
+## 12. Mapping Algorithm
+
+For every row with valid latitude, longitude, and `image_name`, the mapper:
+
+1. Reads altitude from `baro_altitude`, falling back to `gps_altitude`.
+2. Estimates image ground width and height using:
+
+```text
+ground_size = 2 * altitude * tan(field_of_view / 2)
+```
+
+3. Creates a rectangle centered on the GPS coordinate.
+4. Rotates that rectangle by the logged yaw angle.
+5. Converts local meter offsets back to latitude/longitude.
+6. Draws the rectangle on the HTML map and KML export.
+7. Rasterizes all rectangles onto a metric grid to estimate unique covered
+   area and overlap.
+
+Assumptions:
+
+- Camera is nadir-facing due to gimbal stabilization.
+- Terrain is locally flat.
+- GPS coordinate is the center of the image.
+- Roll and pitch are small enough to ignore for this first coverage model.
