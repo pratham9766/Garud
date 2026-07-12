@@ -1,0 +1,9 @@
+numpy
+pandas
+matplotlib
+pyserial
+pynmea2
+folium
+simplekml
+pillow
+opencv-python

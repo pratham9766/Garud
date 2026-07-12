@@ -1,0 +1,110 @@
+"""
+Barometer module — mock and real-hardware placeholder.
+
+Mock simulates descent from ~700 m to ground level.
+"""
+
+from __future__ import annotations
+
+import logging
+import random
+import threading
+import time
+from abc import ABC, abstractmethod
+
+import config
+from core.mission_state import MissionState
+from core.shared_data import SharedData
+
+logger = logging.getLogger(__name__)
+
+
+class BaseBarometer(ABC):
+    @abstractmethod
+    def read(self) -> dict:
+        """Return dict with altitude (metres) and pressure (hPa, optional)."""
+
+    @abstractmethod
+    def close(self) -> None:
+        pass
+
+
+class MockBarometer(BaseBarometer):
+    """Simulated barometric altitude decreasing during descent."""
+
+    def __init__(self) -> None:
+        self._altitude = config.MOCK_START_ALTITUDE_M
+        self._descent_rate = config.MOCK_START_ALTITUDE_M / max(
+            config.SIMULATION_DURATION_SEC, 1.0
+        )
+
+    def read(self) -> dict:
+        # Decrease altitude each read; add small noise
+        self._altitude = max(
+            0.0,
+            self._altitude - self._descent_rate * 0.5 + random.uniform(-0.3, 0.3),
+        )
+        pressure = 1013.25 * (1.0 - self._altitude / 44330.0) ** 5.255
+        return {"altitude": self._altitude, "pressure": pressure}
+
+    def close(self) -> None:
+        logger.debug("MockBarometer closed.")
+
+
+class RealBarometer(BaseBarometer):
+    """Placeholder for I2C barometer at config.BAROMETER_ADDRESS."""
+
+    def __init__(self) -> None:
+        logger.warning(
+            "RealBarometer is a stub — connect I2C address 0x%02X when ready.",
+            config.BAROMETER_ADDRESS,
+        )
+
+    def read(self) -> dict:
+        return {"altitude": 0.0, "pressure": 1013.25}
+
+    def close(self) -> None:
+        pass
+
+
+def create_barometer() -> BaseBarometer:
+    if config.USE_MOCK_HARDWARE:
+        return MockBarometer()
+    return RealBarometer()
+
+
+def barometer_worker(shared: SharedData, stop_event: threading.Event) -> None:
+    """Background thread: poll barometer and update shared data."""
+    baro = create_barometer()
+    logger.info("Barometer worker started (mock=%s).", config.USE_MOCK_HARDWARE)
+
+    try:
+        while not stop_event.is_set():
+            try:
+                reading = baro.read()
+                shared.update(
+                    baro_altitude=reading["altitude"],
+                    barometer_ok=True,
+                )
+            except Exception as exc:
+                logger.error("Barometer read error: %s", exc)
+                shared.update(barometer_ok=False, status="BARO_ERROR")
+
+            stop_event.wait(0.5)
+    finally:
+        baro.close()
+        logger.info("Barometer worker stopped.")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    sd = SharedData()
+    evt = threading.Event()
+    t = threading.Thread(target=barometer_worker, args=(sd, evt), daemon=True)
+    t.start()
+    for _ in range(10):
+        time.sleep(0.5)
+        snap = sd.get_snapshot()
+        print(f"baro_alt={snap.baro_altitude:.1f} m")
+    evt.set()
+    t.join()

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Runtime outputs
+data/images/*
+data/logs/*
+data/maps/*
+
+# Keep output directories in the repository
+!data/images/.gitkeep
+!data/logs/.gitkeep
+!data/maps/.gitkeep
+
+# Local/editor files
+.env
+.env.*
+.vscode/
+.idea/
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store
