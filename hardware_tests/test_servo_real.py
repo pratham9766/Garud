@@ -2,9 +2,10 @@
 Single servo hardware test.
 
 Wiring:
-  Servo signal (orange/yellow) -> GPIO18 (physical pin 12)
-  Servo VCC (red)              -> EXTERNAL 5V supply (NOT Pi 5V pin)
-  Servo GND (brown/black)      -> Common GND with Pi
+  PCA9685 servo controller -> I2C SDA/SCL on the GARUDA HAT
+  OE                       -> GPIO4 (physical pin 7)
+  Servo VCC (red)          -> external 5V rail from servo supply
+  Servo GND (brown/black)  -> common GND with Pi
 
 Run from project root:
   python hardware_tests/test_servo_real.py
@@ -17,87 +18,71 @@ import time
 
 from hw_common import banner, ensure_dirs, is_raspberry_pi, result, write_log
 
-# Default pitch servo pin from project pin map
-SERVO_PIN = 18
+import config
+
+SERVO_CHANNEL = config.GIMBAL_PAN_CHANNEL
 SWEEP_ANGLES = [0, 45, 90, 45, 0]
 STEP_DELAY_SEC = 1.5
 
 
 def main() -> int:
-    banner("Hardware Test: Single Servo")
+    banner("Hardware Test: Single Servo (PCA9685)")
     ensure_dirs()
     log_lines: list[str] = []
 
-    print(f"Servo signal pin: GPIO{SERVO_PIN} (physical pin 12)")
+    print(f"Servo controller: PCA9685 at I2C address 0x{config.SERVO_CONTROLLER_ADDRESS:02X}")
+    print(f"I2C pins:         SDA=GPIO{config.I2C_SDA_PIN} pin 3, SCL=GPIO{config.I2C_SCL_PIN} pin 5")
+    print(f"OE pin:           GPIO{config.SERVO_OE_PIN} (physical pin 7)")
+    print(f"Servo channel:    {SERVO_CHANNEL}")
     print(f"Sweep sequence:   {SWEEP_ANGLES} degrees")
     print(f"Step delay:       {STEP_DELAY_SEC}s between moves")
     print()
     result(
         "WARNING",
-        "Do not power servo from Raspberry Pi 5V for serious testing. "
-        "Use external 5V supply and common GND.",
+        "Do not power servos from Raspberry Pi 5V. Use the HAT servo power rail "
+        "and keep Pi, HAT, and servo grounds common.",
     )
     log_lines.append("External power warning shown")
     print()
 
     if not is_raspberry_pi():
-        result("WARNING", "Not running on Raspberry Pi — servo GPIO will not work.")
+        result("WARNING", "Not running on Raspberry Pi - I2C servo control will not work.")
         log_lines.append("WARNING: not on Pi")
 
-    servo = None
-    backend = ""
-
-    # --- Try gpiozero AngularServo ---
     try:
-        from gpiozero import AngularServo
-        from gpiozero.pins.pigpio import PiGPIOFactory
-
-        factory = PiGPIOFactory()
-        servo = AngularServo(
-            SERVO_PIN,
-            min_angle=0,
-            max_angle=180,
-            pin_factory=factory,
-        )
-        backend = f"gpiozero AngularServo GPIO{SERVO_PIN} (pigpio)"
+        from adafruit_servokit import ServoKit
     except ImportError:
-        result("WARNING", "gpiozero/pigpio not available — trying gpiozero default.")
+        result("FAIL", "adafruit-circuitpython-servokit not installed.")
+        print("Install: pip install adafruit-circuitpython-servokit")
+        write_log("test_servo_real.log", ["FAIL: adafruit_servokit missing"])
+        return 1
+
+    kit = None
+    try:
+        kit = ServoKit(channels=16, address=config.SERVO_CONTROLLER_ADDRESS)
+        servo = kit.servo[SERVO_CHANNEL]
+        servo.set_pulse_width_range(500, 2500)
     except Exception as exc:
-        result("WARNING", f"pigpio backend failed: {exc} — trying default pin factory.")
+        result("FAIL", f"Cannot init PCA9685 servo channel {SERVO_CHANNEL}: {exc}")
+        print("Check I2C wiring, HAT power, and run: python hardware_tests/test_i2c_scan.py")
+        write_log("test_servo_real.log", [f"FAIL: {exc}"])
+        return 1
 
-    if servo is None:
-        try:
-            from gpiozero import AngularServo
-
-            servo = AngularServo(SERVO_PIN, min_angle=0, max_angle=180)
-            backend = f"gpiozero AngularServo GPIO{SERVO_PIN}"
-        except ImportError:
-            result("FAIL", "gpiozero not installed.")
-            print("Install: sudo apt install -y python3-gpiozero")
-            print("For stable PWM: sudo apt install -y pigpio && sudo systemctl enable pigpiod")
-            write_log("test_servo_real.log", ["FAIL: gpiozero missing"])
-            return 1
-        except Exception as exc:
-            result("FAIL", f"Cannot init servo on GPIO{SERVO_PIN}: {exc}")
-            write_log("test_servo_real.log", [f"FAIL: {exc}"])
-            return 1
-
-    result("INFO", f"Using backend: {backend}")
-    log_lines.append(f"Backend: {backend}")
+    result("INFO", f"Using PCA9685 channel {SERVO_CHANNEL}.")
+    log_lines.append(f"PCA9685 channel: {SERVO_CHANNEL}")
 
     try:
         for angle in SWEEP_ANGLES:
-            print(f"  -> Moving to {angle}°")
+            print(f"  -> Moving to {angle} degrees")
             log_lines.append(f"Angle: {angle}")
             servo.angle = angle
             time.sleep(STEP_DELAY_SEC)
 
-        # Return to neutral and release
         servo.angle = 0
         time.sleep(0.5)
-        servo.detach()
+        servo.angle = None
 
-        result("PASS", f"Servo sweep completed on GPIO{SERVO_PIN}.")
+        result("PASS", f"Servo sweep completed on PCA9685 channel {SERVO_CHANNEL}.")
         log_lines.append("PASS")
         code = 0
 
@@ -106,11 +91,8 @@ def main() -> int:
         log_lines.append(f"FAIL: {exc}")
         code = 1
     finally:
-        if servo is not None:
-            try:
-                servo.close()
-            except Exception:
-                pass
+        if kit is not None:
+            kit.servo[SERVO_CHANNEL].angle = None
 
     log_path = write_log("test_servo_real.log", log_lines)
     print(f"Log saved: {log_path}")

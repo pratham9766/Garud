@@ -1,6 +1,6 @@
-# GARUDA Ground Mapping Payload
+# GARUDA TARSR Ground Mapping Payload
 
-Onboard software for the GARUDA CanSat terrain/ground mapping payload. The
+Onboard software for the GARUDA CanSat terrain and ground mapping payload. The
 payload runs on a Raspberry Pi, collects GPS, barometer, IMU, camera, gimbal,
 and telemetry data during descent, logs the mission to CSV, and generates
 HTML/KML flight-path maps after shutdown.
@@ -8,7 +8,15 @@ HTML/KML flight-path maps after shutdown.
 The project currently defaults to simulation mode, so it can be developed and
 tested without connected flight hardware.
 
-## Current Capabilities
+## Project Status
+
+The simulation path is the primary working flow. It can generate a fake descent,
+capture mock images, log telemetry, and export map products without hardware.
+Real hardware bring-up scripts and configuration hooks are included for Raspberry
+Pi testing, but the flight hardware path should be verified end-to-end before
+mission use.
+
+## Features
 
 - Simulated GPS track near Pune, India.
 - Simulated descent from roughly 700 m altitude.
@@ -21,6 +29,15 @@ tested without connected flight hardware.
 - Estimated camera ground footprints and unique coverage area.
 - Standalone hardware bring-up scripts for Raspberry Pi testing.
 
+## Tech Stack
+
+- Python 3.9+
+- Raspberry Pi target platform
+- Folium for interactive HTML maps
+- SimpleKML for Google Earth exports
+- Pillow/OpenCV for image handling
+- Adafruit CircuitPython libraries for supported hardware modules
+
 ## Mapping Scope
 
 The implemented mapping is GPS flight-path mapping plus an estimated camera
@@ -28,7 +45,7 @@ coverage model. It plots the payload path, geotagged image capture points, and
 estimated ground rectangles for each image based on altitude, yaw, and camera
 field-of-view.
 
-This repository does not yet implement orthomosaic generation, image stitching,
+This repository does not implement orthomosaic generation, image stitching,
 SLAM, feature matching, or camera-to-ground projection.
 
 ## Repository Layout
@@ -44,7 +61,7 @@ ground_mapping_payload/
 |-- logging_system/     CSV logger
 |-- mapping/            Fake flight data, HTML map, KML, geotag helpers
 |-- sensors/            GPS, IMU, and barometer interfaces
-|-- telemetry/          XBee telemetry packet generation/sending
+|-- telemetry/          LoRa/XBee telemetry packet generation/sending
 |-- tests/              Simulation and module tests
 |-- config.py           Runtime configuration
 |-- main.py             Main mission entry point
@@ -52,18 +69,26 @@ ground_mapping_payload/
 `-- README.md
 ```
 
-## Requirements
+## Hardware Target
 
 - Python 3.9 or newer
 - Raspberry Pi 4 recommended for hardware mode
-- Optional hardware: GPS, camera, barometer, IMU, 2-axis gimbal, XBee radio
+- Optional hardware: GPS, camera, BMP388 barometer, BNO085 IMU, PCA9685 gimbal, LoRa radio
 
 Python packages are listed in `requirements.txt`.
 
 ## Quick Start
 
+Clone the repository:
+
 ```bash
-cd ground_mapping_payload
+git clone https://github.com/pratham9766/Garuda_TARSR.git
+cd Garuda_TARSR
+```
+
+Create a virtual environment:
+
+```bash
 python -m venv venv
 ```
 
@@ -96,7 +121,7 @@ python main.py
 Press `Ctrl+C` to stop the main program cleanly. When logging and mapping are
 enabled, the program generates output maps during shutdown.
 
-## Common Commands
+## Testing
 
 Generate a fake flight log and maps:
 
@@ -104,7 +129,7 @@ Generate a fake flight log and maps:
 python tests/test_fake_mapping.py
 ```
 
-Run module tests:
+Run the main simulation/module checks:
 
 ```bash
 python tests/test_gps.py
@@ -112,6 +137,12 @@ python tests/test_imu.py
 python tests/test_barometer.py
 python tests/test_camera.py
 python tests/test_telemetry.py
+```
+
+Run all pytest-style tests if `pytest` is installed:
+
+```bash
+python -m pytest tests
 ```
 
 Run hardware checks on Raspberry Pi:
@@ -138,6 +169,9 @@ python hardware_tests/test_all_sensors_status.py
 | `data/maps/flight_path.kml` | Google Earth KML export |
 | `data/logs/hardware_tests/` | Hardware test logs |
 
+Runtime output folders are kept in the repository with `.gitkeep` files, while
+generated logs, images, and maps are ignored by Git.
+
 ## CSV Format
 
 ```text
@@ -147,7 +181,7 @@ timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,
 ## Configuration
 
 Edit `config.py` to enable/disable modules, switch between mock and real
-hardware, adjust capture/logging intervals, and set serial/I2C device values.
+hardware, adjust capture/logging intervals, and set serial/I2C/SPI device values.
 
 Important settings:
 
@@ -188,11 +222,11 @@ placeholders. Before flight use, implement and verify:
 | File | Class / area |
 | --- | --- |
 | `sensors/gps.py` | `RealGPS` NMEA serial reader |
-| `sensors/imu.py` | Real IMU I2C reader |
-| `sensors/barometer.py` | Real barometer I2C reader |
+| `sensors/imu.py` | Real BNO085 SPI reader |
+| `sensors/barometer.py` | Real BMP388 SPI reader |
 | `camera/mock_camera.py` | Real Raspberry Pi camera capture |
-| `telemetry/xbee_sender.py` | Real XBee serial transmitter |
-| `gimbal/servo_control.py` | Real servo PWM control |
+| `telemetry/xbee_sender.py` | Real LoRa/XBee serial transmitter |
+| `gimbal/servo_control.py` | Real PCA9685 servo control |
 
 ## License
 

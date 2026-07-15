@@ -4,33 +4,34 @@ Track hardware arrival, assembly, and software integration status.
 
 | Component | Ordered | Received | Bench Tested | Integrated | Software Driver | Notes |
 |-----------|---------|----------|--------------|------------|-----------------|-------|
-| Raspberry Pi 4 8GB | ☐ | ☐ | ☐ | ☐ | N/A | |
-| microSD card (32 GB+) | ☐ | ☐ | ☐ | ☐ | N/A | High endurance recommended |
-| Pi HQ / Arducam HQ Camera | ☐ | ☐ | ☐ | ☐ | `RealCamera` stub | CSI cable included? |
-| GPS module | ☐ | ☐ | ☐ | ☐ | `RealGPS` stub | USB adapter for dev |
-| Barometer (BMP280) | ☐ | ☐ | ☐ | ☐ | `RealBarometer` stub | I2C 0x76 |
-| IMU (MPU6050) | ☐ | ☐ | ☐ | ☐ | `RealIMU` stub | I2C 0x68 |
-| 2-axis servo gimbal | ☐ | ☐ | ☐ | ☐ | `RealGimbal` stub | External 5 V supply |
-| XBee module + adapter | ☐ | ☐ | ☐ | ☐ | `RealTelemetry` stub | USB first |
-| Servo BEC (5 V) | ☐ | ☐ | ☐ | ☐ | N/A | |
-| Jumper wires / breadboard | ☐ | ☐ | ☐ | ☐ | N/A | |
-| Payload enclosure | ☐ | ☐ | ☐ | ☐ | N/A | |
+| Raspberry Pi 4 8GB | [ ] | [ ] | [ ] | [ ] | N/A | |
+| microSD card (32 GB+) | [ ] | [ ] | [ ] | [ ] | N/A | High endurance recommended |
+| Pi HQ / Arducam HQ Camera | [ ] | [ ] | [ ] | [ ] | `RealCamera` stub | CSI cable |
+| GPS module | [ ] | [ ] | [ ] | [ ] | `RealGPS` stub | USB-UART because HAT UART is LoRa |
+| BMP388 barometer | [ ] | [ ] | [ ] | [ ] | `RealBarometer` stub | SPI: `CS_BMP` on GPIO22 |
+| BNO085 IMU | [ ] | [ ] | [ ] | [ ] | `RealIMU` stub | SPI: `CS_BNO` on GPIO5 |
+| PCA9685 servo controller | [ ] | [ ] | [ ] | [ ] | `adafruit_servokit` hardware tests | I2C, `OE_Servo` on GPIO4 |
+| 2-axis servo gimbal | [ ] | [ ] | [ ] | [ ] | `RealGimbal` stub | PCA9685 channels in `config.py` |
+| LoRa telemetry module | [ ] | [ ] | [ ] | [ ] | `RealTelemetry` stub | UART GPIO14/GPIO15, M0/M1/AUX |
+| INA219 current sensor | [ ] | [ ] | [ ] | [ ] | Planned | I2C |
+| HAT 5 V power path | [ ] | [ ] | [ ] | [ ] | N/A | XT30/J4 and protection path |
+| Payload enclosure | [ ] | [ ] | [ ] | [ ] | N/A | |
 
 ## Software Status
 
 | Module | Mock Working | Real Driver | Test Script |
 |--------|--------------|-------------|-------------|
-| GPS | ✅ | ☐ | `tests/test_gps.py` |
-| IMU | ✅ | ☐ | `tests/test_imu.py` |
-| Barometer | ✅ | ☐ | `tests/test_barometer.py` |
-| Camera | ✅ | ☐ | `tests/test_camera.py` |
-| Gimbal | ✅ | ☐ | — |
-| Telemetry | ✅ | ☐ | `tests/test_telemetry.py` |
-| CSV Logger | ✅ | N/A | full simulation |
-| Map / KML | ✅ | N/A | `tests/test_fake_mapping.py` |
-| Full simulation | ✅ | ☐ | `tests/test_full_simulation.py` |
+| GPS | yes | stub | `tests/test_gps.py`, `hardware_tests/test_gps_real.py` |
+| IMU | yes | stub | `tests/test_imu.py` |
+| Barometer | yes | stub | `tests/test_barometer.py` |
+| Camera | yes | stub | `tests/test_camera.py`, `hardware_tests/test_camera_real.py` |
+| Gimbal | yes | partial PCA9685 hardware test | `hardware_tests/test_gimbal_real.py` |
+| Telemetry | yes | serial stub | `tests/test_telemetry.py`, `hardware_tests/test_xbee_real.py` |
+| CSV Logger | yes | N/A | full simulation |
+| Map / KML | yes | N/A | `tests/test_fake_mapping.py` |
+| Full simulation | yes | stubbed hardware | `tests/test_full_simulation.py` |
 
 ## Last Updated
 
-_Date: ___________  
+Date: ___________
 Updated by: ___________

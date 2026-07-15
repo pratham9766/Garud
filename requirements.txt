@@ -7,3 +7,6 @@ folium
 simplekml
 pillow
 opencv-python
+adafruit-circuitpython-servokit
+adafruit-circuitpython-bmp3xx
+adafruit-circuitpython-bno08x

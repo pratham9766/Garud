@@ -75,7 +75,7 @@ XBEE_PORT = "/dev/ttyUSB1"
 GPS_BAUDRATE = 9600
 XBEE_BAUDRATE = 9600
 BAROMETER_ADDRESS = 0x76
-IMU_ADDRESS = 0x68
+SERVO_CONTROLLER_ADDRESS = 0x40
 ```
 
 Module flags can disable subsystems during debugging:
@@ -184,14 +184,14 @@ Recommended order:
 
 1. Boot Raspberry Pi and confirm SSH access.
 2. Install Python dependencies.
-3. Confirm I2C devices.
+3. Confirm I2C devices for PCA9685/INA219.
 4. Test camera.
 5. Test GPS.
 6. Test barometer.
 7. Test IMU.
 8. Test servos.
 9. Test gimbal.
-10. Test XBee telemetry.
+10. Test LoRa telemetry.
 11. Run full integrated simulation.
 12. Run a short real-hardware field walk.
 
@@ -221,8 +221,9 @@ pip install adafruit-circuitpython-bmp280 adafruit-circuitpython-mpu6050 adafrui
 Enable interfaces with `raspi-config`:
 
 - Camera
-- I2C
-- Serial as needed for GPS/XBee
+- I2C for PCA9685/INA219
+- SPI for BNO085/BMP388
+- Serial as needed for GPS/LoRa
 
 ## 9. Pre-Flight Checklist
 
@@ -261,7 +262,7 @@ Camera errors:
 No telemetry:
 
 - Confirm `XBEE_PORT` and `XBEE_BAUDRATE`.
-- Check XBee pairing and ground-station receiver.
+- Check LoRa pairing/configuration and ground-station receiver.
 - Run `hardware_tests/test_xbee_real.py`.
 
 ## 11. Development Notes

@@ -1,8 +1,11 @@
 """
-Real XBee serial telemetry test.
+Real LoRa/XBee serial telemetry test.
 
 Wiring:
-  XBee USB adapter -> Pi USB port (development)
+  GARUDA HAT LoRa UART -> GPIO14/GPIO15, or USB adapter during development
+  M0  -> GPIO23 (physical pin 16)
+  M1  -> GPIO24 (physical pin 18)
+  AUX -> GPIO25 (physical pin 22)
   Config port: XBEE_PORT (default /dev/ttyUSB1)
   Baud:        XBEE_BAUDRATE (default 9600)
   GND common with Pi
@@ -25,14 +28,15 @@ import config
 
 
 def main() -> int:
-    banner("Hardware Test: XBee Telemetry (serial)")
+    banner("Hardware Test: LoRa/XBee Telemetry (serial)")
     ensure_dirs()
     log_lines: list[str] = []
 
     print(f"Serial port: {config.XBEE_PORT}")
     print(f"Baud rate:   {config.XBEE_BAUDRATE}")
     print("Duration:    10 packets, 1 second apart")
-    print("Wiring:      XBee via USB-UART adapter (or UART later)")
+    print("Wiring:      LoRa UART on GPIO14/GPIO15 or USB-UART adapter during development")
+    print(f"Control:     M0=GPIO{config.LORA_M0_PIN}, M1=GPIO{config.LORA_M1_PIN}, AUX=GPIO{config.LORA_AUX_PIN}")
     print()
 
     try:

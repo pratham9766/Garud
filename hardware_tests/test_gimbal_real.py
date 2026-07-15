@@ -1,11 +1,13 @@
 """
-2-axis gimbal hardware test (pan + tilt servos).
+2-axis gimbal hardware test through the GARUDA HAT PCA9685 servo controller.
 
 Wiring:
-  Pan servo signal  -> GPIO18 (physical pin 12)
-  Tilt servo signal -> GPIO19 (physical pin 35)
-  Both VCC          -> EXTERNAL 5V supply (common BEC)
-  Both GND          -> Common GND with Pi
+  PCA9685 servo controller -> I2C SDA/SCL on the GARUDA HAT
+  OE                       -> GPIO4 (physical pin 7)
+  Pan servo                -> PCA9685 channel from config.GIMBAL_PAN_CHANNEL
+  Tilt servo               -> PCA9685 channel from config.GIMBAL_TILT_CHANNEL
+  Servo VCC                -> external 5V rail from servo supply
+  Servo GND                -> common GND with Pi
 
 Run from project root:
   python hardware_tests/test_gimbal_real.py
@@ -18,13 +20,14 @@ import time
 
 from hw_common import banner, ensure_dirs, is_raspberry_pi, result, write_log
 
-PAN_SERVO_PIN = 18
-TILT_SERVO_PIN = 19
+import config
+
+PAN_SERVO_CHANNEL = config.GIMBAL_PAN_CHANNEL
+TILT_SERVO_CHANNEL = config.GIMBAL_TILT_CHANNEL
 CENTER_PAN = 90
 CENTER_TILT = 90
 STEP_DELAY_SEC = 1.2
 
-# Safe small movements from center (degrees)
 MOVEMENTS = [
     ("center", CENTER_PAN, CENTER_TILT),
     ("pan left", CENTER_PAN - 20, CENTER_TILT),
@@ -35,66 +38,64 @@ MOVEMENTS = [
 ]
 
 
-def create_servo(pin: int):
-    """Create an AngularServo on the given GPIO pin."""
-    from gpiozero import AngularServo
-
-    try:
-        from gpiozero.pins.pigpio import PiGPIOFactory
-
-        return AngularServo(pin, min_angle=0, max_angle=180, pin_factory=PiGPIOFactory())
-    except Exception:
-        return AngularServo(pin, min_angle=0, max_angle=180)
-
-
 def main() -> int:
-    banner("Hardware Test: 2-Axis Gimbal")
+    banner("Hardware Test: 2-Axis Gimbal (PCA9685)")
     ensure_dirs()
     log_lines: list[str] = []
 
-    print(f"Pan servo (GPIO{PAN_SERVO_PIN}, pin 12):  left/right")
-    print(f"Tilt servo (GPIO{TILT_SERVO_PIN}, pin 35): up/down")
-    print(f"Center position: pan={CENTER_PAN}° tilt={CENTER_TILT}°")
+    print(f"Servo controller: PCA9685 at I2C address 0x{config.SERVO_CONTROLLER_ADDRESS:02X}")
+    print(f"I2C pins:         SDA=GPIO{config.I2C_SDA_PIN} pin 3, SCL=GPIO{config.I2C_SCL_PIN} pin 5")
+    print(f"OE pin:           GPIO{config.SERVO_OE_PIN} (physical pin 7)")
+    print(f"Pan channel:      {PAN_SERVO_CHANNEL}")
+    print(f"Tilt channel:     {TILT_SERVO_CHANNEL}")
+    print(f"Center position:  pan={CENTER_PAN} deg tilt={CENTER_TILT} deg")
     print()
     result(
         "WARNING",
-        "Do not power servos from Raspberry Pi 5V. "
-        "Use external 5V supply and common GND.",
+        "Do not power servos from Raspberry Pi 5V. Use the HAT servo power rail "
+        "and keep Pi, HAT, and servo grounds common.",
     )
     log_lines.append("External power warning shown")
     print()
 
     if not is_raspberry_pi():
-        result("WARNING", "Not running on Raspberry Pi — GPIO servos will not work.")
+        result("WARNING", "Not running on Raspberry Pi - I2C servo control will not work.")
         log_lines.append("WARNING: not on Pi")
 
-    pan = tilt = None
     try:
-        pan = create_servo(PAN_SERVO_PIN)
-        tilt = create_servo(TILT_SERVO_PIN)
+        from adafruit_servokit import ServoKit
     except ImportError:
-        result("FAIL", "gpiozero not installed.")
-        print("Install: sudo apt install -y python3-gpiozero pigpio")
-        write_log("test_gimbal_real.log", ["FAIL: gpiozero missing"])
+        result("FAIL", "adafruit-circuitpython-servokit not installed.")
+        print("Install: pip install adafruit-circuitpython-servokit")
+        write_log("test_gimbal_real.log", ["FAIL: adafruit_servokit missing"])
         return 1
+
+    kit = None
+    try:
+        kit = ServoKit(channels=16, address=config.SERVO_CONTROLLER_ADDRESS)
+        pan = kit.servo[PAN_SERVO_CHANNEL]
+        tilt = kit.servo[TILT_SERVO_CHANNEL]
+        pan.set_pulse_width_range(500, 2500)
+        tilt.set_pulse_width_range(500, 2500)
     except Exception as exc:
-        result("FAIL", f"Cannot init gimbal servos: {exc}")
+        result("FAIL", f"Cannot init PCA9685 gimbal servos: {exc}")
+        print("Check I2C wiring, HAT power, and run: python hardware_tests/test_i2c_scan.py")
         write_log("test_gimbal_real.log", [f"FAIL: {exc}"])
         return 1
 
-    result("INFO", f"Pan=GPIO{PAN_SERVO_PIN}, Tilt=GPIO{TILT_SERVO_PIN}")
-    log_lines.append(f"Pins: pan={PAN_SERVO_PIN} tilt={TILT_SERVO_PIN}")
+    result("INFO", f"Pan=channel {PAN_SERVO_CHANNEL}, Tilt=channel {TILT_SERVO_CHANNEL}")
+    log_lines.append(f"Channels: pan={PAN_SERVO_CHANNEL} tilt={TILT_SERVO_CHANNEL}")
 
     try:
         for label, pan_angle, tilt_angle in MOVEMENTS:
-            print(f"  -> {label}: pan={pan_angle}° tilt={tilt_angle}°")
+            print(f"  -> {label}: pan={pan_angle} deg tilt={tilt_angle} deg")
             log_lines.append(f"{label}: pan={pan_angle} tilt={tilt_angle}")
             pan.angle = pan_angle
             tilt.angle = tilt_angle
             time.sleep(STEP_DELAY_SEC)
 
-        pan.detach()
-        tilt.detach()
+        pan.angle = None
+        tilt.angle = None
         result("PASS", "Gimbal movement sequence completed.")
         log_lines.append("PASS")
         code = 0
@@ -104,12 +105,9 @@ def main() -> int:
         log_lines.append(f"FAIL: {exc}")
         code = 1
     finally:
-        for s in (pan, tilt):
-            if s is not None:
-                try:
-                    s.close()
-                except Exception:
-                    pass
+        if kit is not None:
+            kit.servo[PAN_SERVO_CHANNEL].angle = None
+            kit.servo[TILT_SERVO_CHANNEL].angle = None
 
     log_path = write_log("test_gimbal_real.log", log_lines)
     print(f"Log saved: {log_path}")

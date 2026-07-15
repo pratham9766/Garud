@@ -5,10 +5,9 @@ Wiring (USB adapter phase):
   GPS module -> USB-UART adapter -> Pi USB port
   Config port: GPS_PORT (default /dev/ttyUSB0)
 
-Wiring (direct UART phase):
-  GPS TX -> Pi RX (GPIO15, pin 10)
-  GPS RX -> Pi TX (GPIO14, pin 8)
-  Common GND
+Schema note:
+  GPIO14/GPIO15 are assigned to LoRa telemetry on the GARUDA HAT.
+  Keep GPS on USB-UART unless you add a separate UART path.
 
 Run from project root:
   python hardware_tests/test_gps_real.py
@@ -32,7 +31,7 @@ def main() -> int:
     print(f"Serial port:  {config.GPS_PORT}")
     print(f"Baud rate:    {config.GPS_BAUDRATE}")
     print("Duration:     60 seconds")
-    print("Wiring:       GPS via USB-UART or Pi UART (GPIO14 TX / GPIO15 RX)")
+    print("Wiring:       GPS via USB-UART; GPIO14/GPIO15 are assigned to LoRa on the HAT")
     print()
 
     try:

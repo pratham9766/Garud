@@ -4,7 +4,7 @@ I2C bus scan for Raspberry Pi.
 Wiring (I2C bus 1):
   SDA -> GPIO2 (physical pin 3)
   SCL -> GPIO3 (physical pin 5)
-  3.3V and GND to sensor boards
+  3.3V and GND to the GARUDA HAT logic rail
 
 Run from project root:
   python hardware_tests/test_i2c_scan.py
@@ -28,10 +28,9 @@ def main() -> int:
 
     print("Bus: I2C-1  (SDA=GPIO2 pin 3, SCL=GPIO3 pin 5)")
     print("Expected addresses:")
-    print("  Barometer (BMP280/BMP388): 0x76 or 0x77")
-    print(f"  Barometer (config):          0x{config.BAROMETER_ADDRESS:02X}")
-    print("  IMU (MPU6050):               0x68 or 0x69")
-    print(f"  IMU (config):                0x{config.IMU_ADDRESS:02X}")
+    print(f"  PCA9685 servo controller:  0x{config.SERVO_CONTROLLER_ADDRESS:02X}")
+    print("  INA219 current sensor:      0x40 or 0x41 depending address jumpers")
+    print("  Note: BNO085 and BMP388 are SPI devices in Schema_Draft_2.pdf")
     print()
 
     if not is_raspberry_pi():
