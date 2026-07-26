@@ -33,6 +33,12 @@ class BNO055Sensor:
         """Initialize the BNO055 sensor."""
         if self._sensor is not None:
             return
+        if self.config.interface != "i2c":
+            raise HardwareError(
+                "BNO055Sensor supports I2C only. The uploaded schematic appears "
+                "to show SPI-style BNO nets; use an I2C BNO055 connection or a "
+                "BNO08x driver if that is the actual module."
+            )
         try:
             import board
             import busio

@@ -9,7 +9,8 @@ The toolkit is organized as small, independently reusable Python modules. Each h
 - Raspberry Pi 5
 - Raspberry Pi OS Bookworm 64-bit
 - Python 3.11 or newer
-- I2C enabled
+- I2C enabled for I2C sensors
+- SPI enabled for the uploaded BMP388 schematic wiring
 - Camera enabled through the modern libcamera stack
 - `pigpiod` running for servo PWM
 
@@ -97,7 +98,37 @@ i2cdetect -y 1
 Expected defaults:
 
 - BNO055: `0x28`
-- BMP388: `0x76`
+- BMP388 I2C mode only: `0x76`
+
+## Enable SPI
+
+The uploaded schematic connects the BMP388 through SPI0.
+
+Run:
+
+```bash
+sudo raspi-config
+```
+
+Then select:
+
+```text
+Interface Options -> SPI -> Enable
+```
+
+Reboot after enabling:
+
+```bash
+sudo reboot
+```
+
+Optional SPI check:
+
+```bash
+ls /dev/spidev*
+```
+
+You should see devices such as `/dev/spidev0.0` and `/dev/spidev0.1`.
 
 ## Enable Camera
 
@@ -124,6 +155,14 @@ sudo systemctl status pigpiod
 Edit `settings.yaml`:
 
 ```yaml
+board:
+  pin_numbering: BCM
+  i2c_sda_gpio: 2
+  i2c_scl_gpio: 3
+  spi0_mosi_gpio: 10
+  spi0_miso_gpio: 9
+  spi0_sclk_gpio: 11
+
 camera:
   resolution: [1920, 1080]
   preview: true
@@ -133,7 +172,7 @@ camera:
   continuous_interval_seconds: 2.0
 
 servo:
-  gpio: 18
+  gpio: 4
   min_pulse: 500
   max_pulse: 2500
   min_angle: 0
@@ -141,11 +180,23 @@ servo:
   settle_seconds: 0.5
 
 bno055:
+  interface: i2c
   address: 0x28
+  sda_gpio: 2
+  scl_gpio: 3
+  schematic_reset_gpio: 5
+  schematic_cs_gpio: 8
+  schematic_int_gpio: 27
   refresh_hz: 10
 
 bmp388:
+  interface: spi
   address: 0x76
+  sck_gpio: 11
+  mosi_gpio: 10
+  miso_gpio: 9
+  cs_gpio: 22
+  int_gpio: 27
   sea_level_pressure_hpa: 1013.25
   refresh_hz: 5
 
@@ -155,7 +206,7 @@ logging:
   directory: logs
 ```
 
-No GPIO number is hardcoded in the hardware modules; change servo wiring by editing `settings.yaml`.
+No GPIO number is hardcoded in the hardware modules; change wiring by editing `settings.yaml`.
 
 ## Run
 
@@ -185,11 +236,32 @@ Menu:
 
 Always power down the Pi before changing wiring.
 
+## Pin Map From Uploaded Schematic
+
+The schematic uses BCM GPIO numbering on the Raspberry Pi HAT header.
+
+| Net name in schematic | BCM GPIO | Physical pin | Purpose |
+| --- | ---: | ---: | --- |
+| `OE_Servo` | GPIO4 | 7 | Servo PWM/control signal |
+| `SCL_Servo` / I2C SCL | GPIO3 | 5 | I2C clock |
+| `SDA_Servo` / I2C SDA | GPIO2 | 3 | I2C data |
+| `SCK_BMP` | GPIO11 | 23 | BMP388 SPI0 SCLK |
+| `MISO_BMP` | GPIO9 | 21 | BMP388 SPI0 MISO |
+| `MOSI_BMP` | GPIO10 | 19 | BMP388 SPI0 MOSI |
+| `CS_BMP` | GPIO22 | 15 | BMP388 chip select |
+| `INT_BMP` | GPIO27 | 13 | BMP388 interrupt |
+| `RST_BNO` | GPIO5 | 29 | BNO reset net shown in schematic |
+| `CS_BNO` | GPIO8 | 24 | BNO chip-select net shown in schematic |
+| `INT_BNO` | GPIO27 | 13 | BNO interrupt net shown in schematic |
+| `GPIO16` | GPIO16 | 36 | Buzzer driver input |
+
+Important: the schematic page labels the BNO module image as a BNO08x-style breakout and shows SPI-style nets such as `CS_BNO`, `SCK_BNO`, `MOSI_BNO`, and `MISO_BNO`. This project is written for a Bosch BNO055 using the Adafruit BNO055 I2C driver. If your actual fitted module is BNO08x/BNO085 on SPI, replace the BNO055 driver with the matching BNO08x library before expecting IMU readings.
+
 ### Servo Motor
 
 | Servo wire | Raspberry Pi 5 |
 | --- | --- |
-| Signal | GPIO18, physical pin 12 |
+| Signal | GPIO4, physical pin 7, schematic net `OE_Servo` |
 | VCC | External 5 V supply |
 | GND | External supply GND and Pi GND |
 
@@ -208,14 +280,19 @@ Default address: `0x28`.
 
 ### BMP388
 
-| BMP388 pin | Raspberry Pi 5 |
+The uploaded schematic wires BMP388 through SPI.
+
+| BMP388 pin/net | Raspberry Pi 5 |
 | --- | --- |
 | VIN | 3.3 V, physical pin 1 |
 | GND | GND, physical pin 6 |
-| SDA | GPIO2/SDA, physical pin 3 |
-| SCL | GPIO3/SCL, physical pin 5 |
+| SCK / `SCK_BMP` | GPIO11/SPI0 SCLK, physical pin 23 |
+| SDO / `MISO_BMP` | GPIO9/SPI0 MISO, physical pin 21 |
+| SDI / `MOSI_BMP` | GPIO10/SPI0 MOSI, physical pin 19 |
+| CS / `CS_BMP` | GPIO22, physical pin 15 |
+| INT / `INT_BMP` | GPIO27, physical pin 13 |
 
-Default address: `0x76`.
+The `address: 0x76` setting is kept for I2C mode. In the uploaded schematic's SPI mode, chip select GPIO22 is the important selection pin.
 
 ### Camera Module
 
@@ -239,6 +316,41 @@ When `logging.save_logs` is `true`, logs are also written to:
 ```text
 logs/YYYYMMDD.log
 ```
+
+## How To Confirm Sensors Are Working
+
+Start the menu:
+
+```bash
+python3 main.py
+```
+
+Use these options:
+
+| Menu option | What you should see |
+| --- | --- |
+| `5 Scan I2C Bus` | BNO055 should appear as `0x28` if wired as I2C. BMP388 will not appear here when using the uploaded SPI wiring. |
+| `1 Test Camera` | Capture/preview/video options and saved file paths under `captures/`. |
+| `2 Test Servo` | Servo moves to selected angles or performs a sweep. |
+| `3 Test BNO055` | Live acceleration, gyro, magnetometer, Euler, quaternion, calibration, and temperature at 10 Hz. Press `CTRL+C` to stop. |
+| `4 Test BMP388` | Live temperature, pressure, and altitude at 5 Hz. Press `CTRL+C` to stop. |
+| `6 Test Everything` | One combined pass/fail summary for camera, servo, BNO055, and BMP388. |
+
+Quick command-line checks before running Python:
+
+```bash
+i2cdetect -y 1
+ls /dev/spidev*
+rpicam-hello --list-cameras
+systemctl status pigpiod
+```
+
+Expected confirmations:
+
+- BNO055 over I2C: `i2cdetect -y 1` shows `28`.
+- BMP388 using this schematic: `/dev/spidev0.0` or `/dev/spidev0.1` exists, and menu option `4` prints changing pressure/temperature values.
+- Servo: menu option `2` moves the servo and option `8` stops PWM.
+- Camera: menu option `1` saves an image path, and `rpicam-hello --list-cameras` lists the camera.
 
 ## Reusing Hardware Classes
 

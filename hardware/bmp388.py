@@ -37,14 +37,35 @@ class BMP388Sensor:
             raise HardwareError("BMP388 dependencies are not installed.") from exc
 
         try:
-            i2c = busio.I2C(board.SCL, board.SDA)
-            sensor = adafruit_bmp3xx.BMP3XX_I2C(i2c, address=self.config.address)
+            if self.config.interface == "i2c":
+                sensor = self._connect_i2c(board, busio, adafruit_bmp3xx)
+            elif self.config.interface == "spi":
+                sensor = self._connect_spi(board, busio, adafruit_bmp3xx)
+            else:
+                raise HardwareError(
+                    f"Unsupported BMP388 interface: {self.config.interface}"
+                )
             sensor.sea_level_pressure = self.config.sea_level_pressure_hpa
             self._sensor = sensor
         except Exception as exc:
             raise HardwareError(
-                f"BMP388 not detected at 0x{self.config.address:02X}: {exc}"
+                f"BMP388 not detected on {self.config.interface.upper()}: {exc}"
             ) from exc
+
+    def _connect_i2c(self, board, busio, adafruit_bmp3xx):
+        i2c = busio.I2C(board.SCL, board.SDA)
+        return adafruit_bmp3xx.BMP3XX_I2C(i2c, address=self.config.address)
+
+    def _connect_spi(self, board, busio, adafruit_bmp3xx):
+        try:
+            import digitalio
+        except ImportError as exc:
+            raise HardwareError("digitalio is required for BMP388 SPI mode.") from exc
+
+        spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
+        chip_select_pin = getattr(board, f"D{self.config.cs_gpio}")
+        chip_select = digitalio.DigitalInOut(chip_select_pin)
+        return adafruit_bmp3xx.BMP3XX_SPI(spi, chip_select)
 
     def read(self) -> BMP388Reading:
         """Return one BMP388 pressure sensor sample."""
