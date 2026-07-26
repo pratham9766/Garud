@@ -1,0 +1,29 @@
+camera:
+  resolution: [1920, 1080]
+  preview: true
+  image_dir: captures/images
+  video_dir: captures/videos
+  video_seconds: 10
+  continuous_interval_seconds: 2.0
+
+servo:
+  gpio: 18
+  min_pulse: 500
+  max_pulse: 2500
+  min_angle: 0
+  max_angle: 180
+  settle_seconds: 0.5
+
+bno055:
+  address: 0x28
+  refresh_hz: 10
+
+bmp388:
+  address: 0x76
+  sea_level_pressure_hpa: 1013.25
+  refresh_hz: 5
+
+logging:
+  save_logs: true
+  level: INFO
+  directory: logs
