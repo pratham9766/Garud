@@ -56,7 +56,12 @@ def scan_i2c_bus() -> list[int]:
         finally:
             i2c.unlock()
     except Exception as exc:
-        raise HardwareError(f"Unable to scan I2C bus: {exc}") from exc
+            raise HardwareError(f"Unable to scan I2C bus: {exc}") from exc
+
+
+def list_spi_devices() -> list[Path]:
+    """Return available Linux SPI device nodes."""
+    return sorted(Path("/dev").glob("spidev*"))
 
 
 def read_cpu_temperature() -> float | None:

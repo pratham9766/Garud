@@ -1,7 +1,5 @@
 board:
   pin_numbering: BCM
-  i2c_sda_gpio: 2
-  i2c_scl_gpio: 3
   spi0_mosi_gpio: 10
   spi0_miso_gpio: 9
   spi0_sclk_gpio: 11
@@ -22,14 +20,14 @@ servo:
   max_angle: 180
   settle_seconds: 0.5
 
-bno055:
-  interface: i2c
-  address: 0x28
-  sda_gpio: 2
-  scl_gpio: 3
-  schematic_reset_gpio: 5
-  schematic_cs_gpio: 8
-  schematic_int_gpio: 27
+bno085:
+  interface: spi
+  sck_gpio: 11
+  mosi_gpio: 10
+  miso_gpio: 9
+  cs_gpio: 8
+  reset_gpio: 5
+  int_gpio: 27
   refresh_hz: 10
 
 bmp388:

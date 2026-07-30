@@ -18,7 +18,7 @@ class BMP388Reading:
 
 @dataclass
 class BMP388Sensor:
-    """Read temperature, pressure, and altitude from a BMP388 over I2C."""
+    """Read temperature, pressure, and altitude from a BMP388 over SPI or I2C."""
 
     config: BMP388Config
 

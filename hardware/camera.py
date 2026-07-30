@@ -64,6 +64,7 @@ class CameraController:
             self._camera.stop_preview()
             self._camera.stop()
 
+
     def record_video(self, seconds: int | None = None) -> Path:
         """Record a timestamped video and return its path."""
         self.connect()
@@ -88,6 +89,7 @@ class CameraController:
         finally:
             self._camera.stop_recording()
         return path
+
 
     def continuous_capture(self) -> None:
         """Capture images repeatedly until interrupted."""

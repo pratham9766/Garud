@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from config import AppConfig
-from tests import test_bmp388, test_bno055, test_camera, test_servo
-from utils.helpers import HardwareError, scan_i2c_bus
+from tests import test_bmp388, test_bno085, test_camera, test_servo
+from utils.helpers import list_spi_devices
 from utils.logger import ToolkitLogger
 
 
@@ -12,17 +12,17 @@ def run(logger: ToolkitLogger, config: AppConfig) -> bool:
     """Run the full validation sequence and print a summary."""
     results: dict[str, bool] = {}
 
-    try:
-        devices = scan_i2c_bus()
-        logger.success("I2C devices: " + ", ".join(f"0x{item:02X}" for item in devices))
-        results["I2C"] = True
-    except HardwareError as exc:
-        logger.error(str(exc))
-        results["I2C"] = False
+    spi_devices = list_spi_devices()
+    if spi_devices:
+        logger.success("SPI devices: " + ", ".join(str(item) for item in spi_devices))
+        results["SPI"] = True
+    else:
+        logger.error("No SPI devices found. Enable SPI with raspi-config and reboot.")
+        results["SPI"] = False
 
     results["Camera"] = test_camera.quick_check(logger, config)
     results["Servo"] = test_servo.quick_check(logger, config)
-    results["BNO055"] = test_bno055.quick_check(logger, config)
+    results["BNO085"] = test_bno085.quick_check(logger, config)
     results["BMP388"] = test_bmp388.quick_check(logger, config)
 
     print("\nSummary")

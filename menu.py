@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from config import AppConfig
-from tests import test_all, test_bmp388, test_bno055, test_camera, test_servo
+from tests import test_all, test_bmp388, test_bno085, test_camera, test_servo
 from utils.colors import Color
-from utils.helpers import HardwareError, get_system_info, scan_i2c_bus
+from utils.helpers import get_system_info, list_spi_devices
 from utils.logger import ToolkitLogger
 
 
@@ -20,9 +20,9 @@ def _print_header() -> None:
 def _print_menu() -> None:
     print("1 Test Camera")
     print("2 Test Servo")
-    print("3 Test BNO055")
+    print("3 Test BNO085")
     print("4 Test BMP388")
-    print("5 Scan I2C Bus")
+    print("5 Check SPI Devices")
     print("6 Test Everything")
     print("7 Show System Info")
     print("0 Exit")
@@ -46,17 +46,13 @@ def show_system_info() -> None:
     print(f"IP Address:      {info.ip_address}")
 
 
-def scan_i2c(logger: ToolkitLogger) -> None:
-    """Print detected I2C device addresses."""
-    try:
-        devices = scan_i2c_bus()
-    except HardwareError as exc:
-        logger.error(str(exc))
-        return
+def check_spi(logger: ToolkitLogger) -> None:
+    """Print available Linux SPI device nodes."""
+    devices = list_spi_devices()
     if devices:
-        logger.success("I2C devices found: " + ", ".join(f"0x{item:02X}" for item in devices))
+        logger.success("SPI devices found: " + ", ".join(str(item) for item in devices))
     else:
-        logger.warning("No I2C devices found")
+        logger.warning("No SPI devices found. Enable SPI with raspi-config and reboot.")
 
 
 def run_menu(config: AppConfig, logger: ToolkitLogger) -> None:
@@ -71,11 +67,11 @@ def run_menu(config: AppConfig, logger: ToolkitLogger) -> None:
         elif choice == "2":
             test_servo.run(logger, config)
         elif choice == "3":
-            test_bno055.run(logger, config)
+            test_bno085.run(logger, config)
         elif choice == "4":
             test_bmp388.run(logger, config)
         elif choice == "5":
-            scan_i2c(logger)
+            check_spi(logger)
         elif choice == "6":
             test_all.run(logger, config)
         elif choice == "7":

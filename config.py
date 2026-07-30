@@ -20,8 +20,6 @@ class ConfigurationError(ValueError):
 @dataclass(frozen=True)
 class BoardConfig:
     pin_numbering: str
-    i2c_sda_gpio: int
-    i2c_scl_gpio: int
     spi0_mosi_gpio: int
     spi0_miso_gpio: int
     spi0_sclk_gpio: int
@@ -48,14 +46,14 @@ class ServoConfig:
 
 
 @dataclass(frozen=True)
-class BNO055Config:
+class BNO085Config:
     interface: str
-    address: int
-    sda_gpio: int
-    scl_gpio: int
-    schematic_reset_gpio: int
-    schematic_cs_gpio: int
-    schematic_int_gpio: int
+    sck_gpio: int
+    mosi_gpio: int
+    miso_gpio: int
+    cs_gpio: int
+    reset_gpio: int
+    int_gpio: int
     refresh_hz: int
 
 
@@ -84,7 +82,7 @@ class AppConfig:
     board: BoardConfig
     camera: CameraConfig
     servo: ServoConfig
-    bno055: BNO055Config
+    bno085: BNO085Config
     bmp388: BMP388Config
     logging: LoggingConfig
 
@@ -125,8 +123,6 @@ def load_config(settings_path: str | Path = DEFAULT_SETTINGS_PATH) -> AppConfig:
     return AppConfig(
         board=BoardConfig(
             pin_numbering=str(_required(raw, "board", "pin_numbering")),
-            i2c_sda_gpio=int(_required(raw, "board", "i2c_sda_gpio")),
-            i2c_scl_gpio=int(_required(raw, "board", "i2c_scl_gpio")),
             spi0_mosi_gpio=int(_required(raw, "board", "spi0_mosi_gpio")),
             spi0_miso_gpio=int(_required(raw, "board", "spi0_miso_gpio")),
             spi0_sclk_gpio=int(_required(raw, "board", "spi0_sclk_gpio")),
@@ -149,15 +145,15 @@ def load_config(settings_path: str | Path = DEFAULT_SETTINGS_PATH) -> AppConfig:
             max_angle=int(_required(raw, "servo", "max_angle")),
             settle_seconds=float(_required(raw, "servo", "settle_seconds")),
         ),
-        bno055=BNO055Config(
-            interface=str(_required(raw, "bno055", "interface")).lower(),
-            address=_parse_i2c_address(_required(raw, "bno055", "address")),
-            sda_gpio=int(_required(raw, "bno055", "sda_gpio")),
-            scl_gpio=int(_required(raw, "bno055", "scl_gpio")),
-            schematic_reset_gpio=int(_required(raw, "bno055", "schematic_reset_gpio")),
-            schematic_cs_gpio=int(_required(raw, "bno055", "schematic_cs_gpio")),
-            schematic_int_gpio=int(_required(raw, "bno055", "schematic_int_gpio")),
-            refresh_hz=int(_required(raw, "bno055", "refresh_hz")),
+        bno085=BNO085Config(
+            interface=str(_required(raw, "bno085", "interface")).lower(),
+            sck_gpio=int(_required(raw, "bno085", "sck_gpio")),
+            mosi_gpio=int(_required(raw, "bno085", "mosi_gpio")),
+            miso_gpio=int(_required(raw, "bno085", "miso_gpio")),
+            cs_gpio=int(_required(raw, "bno085", "cs_gpio")),
+            reset_gpio=int(_required(raw, "bno085", "reset_gpio")),
+            int_gpio=int(_required(raw, "bno085", "int_gpio")),
+            refresh_hz=int(_required(raw, "bno085", "refresh_hz")),
         ),
         bmp388=BMP388Config(
             interface=str(_required(raw, "bmp388", "interface")).lower(),

@@ -3,7 +3,7 @@ pigpio
 board
 busio
 adafruit-blinka
-adafruit-circuitpython-bno055
+adafruit-circuitpython-bno08x
 adafruit-circuitpython-bmp3xx
 PyYAML
 rich
