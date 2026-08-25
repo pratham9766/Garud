@@ -28,7 +28,11 @@ class PayloadSnapshot:
     roll: float = 0.0
     pitch: float = 0.0
     yaw: float = 0.0
+    gyro_x: float = 0.0
+    gyro_y: float = 0.0
+    gyro_z: float = 0.0
     image_name: str = ""
+    image_timestamp: float = 0.0
     battery: float = 100.0
     status: str = "OK"
     camera_ok: bool = False
@@ -43,7 +47,8 @@ class SharedData:
 
     CSV_HEADER = (
         "timestamp,mission_time,state,latitude,longitude,gps_altitude,"
-        "baro_altitude,roll,pitch,yaw,image_name,battery,status"
+        "baro_altitude,roll,pitch,yaw,gyro_x,gyro_y,gyro_z,image_name,"
+        "image_timestamp,battery,status"
     )
 
     def __init__(self) -> None:
@@ -90,5 +95,7 @@ class SharedData:
             f"{snap.latitude:.6f},{snap.longitude:.6f},"
             f"{snap.gps_altitude:.2f},{snap.baro_altitude:.2f},"
             f"{snap.roll:.2f},{snap.pitch:.2f},{snap.yaw:.2f},"
-            f"{snap.image_name},{snap.battery:.1f},{snap.status}"
+            f"{snap.gyro_x:.3f},{snap.gyro_y:.3f},{snap.gyro_z:.3f},"
+            f"{snap.image_name},{snap.image_timestamp:.3f},"
+            f"{snap.battery:.1f},{snap.status}"
         )

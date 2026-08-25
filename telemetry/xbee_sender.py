@@ -37,19 +37,28 @@ class MockTelemetry(BaseTelemetry):
 
 
 class RealTelemetry(BaseTelemetry):
-    """Placeholder for XBee serial transmission."""
+    """XBee serial telemetry over Pi primary UART GPIO14/GPIO15."""
 
     def __init__(self) -> None:
-        self._serial = None
-        logger.warning(
-            "RealTelemetry is a stub — connect %s @ %d when XBee is ready.",
-            config.XBEE_PORT,
+        import serial
+
+        self._serial = serial.Serial(
+            config.XBEE_SERIAL_PORT,
+            baudrate=config.XBEE_BAUDRATE,
+            timeout=1.0,
+            write_timeout=1.0,
+        )
+        logger.info(
+            "XBee telemetry opened on %s @ %d.",
+            config.XBEE_SERIAL_PORT,
             config.XBEE_BAUDRATE,
         )
 
     def send(self, packet: str) -> bool:
-        logger.info("RealTelemetry stub would send: %s", packet)
-        return False
+        if not self._serial or not self._serial.is_open:
+            return False
+        self._serial.write(packet.encode("utf-8") + b"\n")
+        return True
 
     def close(self) -> None:
         if self._serial:

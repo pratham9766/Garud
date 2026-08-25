@@ -76,11 +76,16 @@ def generate_fake_flight_csv(
         roll = 5.0 * math.sin(t * 0.3) + random.uniform(-0.5, 0.5)
         pitch = 3.0 * math.cos(t * 0.2) + random.uniform(-0.5, 0.5)
         yaw = (t * 8.0) % 360.0
+        gyro_x = 1.5 * math.cos(t * 0.3)
+        gyro_y = -0.6 * math.sin(t * 0.2)
+        gyro_z = 8.0
 
         image_name = ""
+        image_timestamp = 0.0
         if t >= next_image_at and state == MissionState.DESCENT.value:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             image_name = f"fake_img_{ts}_{step}.jpg"
+            image_timestamp = timestamp = datetime.now().timestamp() + t
             next_image_at += image_interval
 
         battery = max(0.0, 100.0 - (t / duration_sec) * 15.0)
@@ -91,7 +96,8 @@ def generate_fake_flight_csv(
             f"{lat:.6f},{lon:.6f},"
             f"{altitude:.2f},{altitude:.2f},"
             f"{roll:.2f},{pitch:.2f},{yaw:.2f},"
-            f"{image_name},{battery:.1f},OK"
+            f"{gyro_x:.3f},{gyro_y:.3f},{gyro_z:.3f},"
+            f"{image_name},{image_timestamp:.3f},{battery:.1f},OK"
         )
         rows.append(row)
         t += interval_sec

@@ -1,9 +1,9 @@
 # GARUDA TARSR Ground Mapping Payload
 
-Onboard software for the GARUDA CanSat terrain and ground mapping payload. The
-payload runs on a Raspberry Pi, collects GPS, barometer, IMU, camera, gimbal,
-and telemetry data during descent, logs the mission to CSV, and generates
-HTML/KML flight-path maps after shutdown.
+Onboard and post-flight software for the GARUDA CanSat terrain and ground
+mapping payload. The payload runs on a Raspberry Pi 5, collects synchronized
+GPS, barometer, IMU, camera, gimbal, and telemetry data during descent, logs the
+mission to CSV, and processes recovered mission data after flight.
 
 The project currently defaults to simulation mode, so it can be developed and
 tested without connected flight hardware.
@@ -23,7 +23,10 @@ mission use.
 - Mock camera image capture with GPS text overlays.
 - Mock IMU, barometer, gimbal, and telemetry workers.
 - Threaded mission runtime with shared payload state.
-- CSV mission logging.
+- CSV mission logging with image timestamps and angular velocity metadata.
+- IMU-assisted pose priors for post-flight image normalization.
+- Post-flight image quality scoring for blur, exposure, tilt, and motion.
+- Graph-based image relationship candidates for non-sequential matching.
 - Interactive Folium HTML map export.
 - Google Earth compatible KML export.
 - Estimated camera ground footprints and unique coverage area.
@@ -40,13 +43,16 @@ mission use.
 
 ## Mapping Scope
 
-The implemented mapping is GPS flight-path mapping plus an estimated camera
-coverage model. It plots the payload path, geotagged image capture points, and
-estimated ground rectangles for each image based on altitude, yaw, and camera
-field-of-view.
+The implemented mapping is transitioning from GPS footprint visualization to a
+pose-assisted photogrammetry framework. The current working map products still
+plot the payload path, geotagged image capture points, and estimated ground
+rectangles. The new post-flight processing scaffold validates stored mission
+data, scores image quality, computes IMU-derived pose priors, and builds an
+image graph for later SIFT/FLANN/RANSAC refinement.
 
-This repository does not implement orthomosaic generation, image stitching,
-SLAM, feature matching, or camera-to-ground projection.
+The repository now contains the V1 foundation for image stitching, but final
+orthomosaic generation, bundle adjustment, SLAM, and 3D reconstruction are not
+yet complete.
 
 ## Repository Layout
 
@@ -60,8 +66,12 @@ ground_mapping_payload/
 |-- hardware_tests/     Real hardware bring-up scripts
 |-- logging_system/     CSV logger
 |-- mapping/            Fake flight data, HTML map, KML, geotag helpers
+|-- processing/         Offline mission validation and preprocessing
+|-- sensor_fusion/      IMU/GPS pose-prior helpers
+|-- storage/            Mission manifest and metadata records
 |-- sensors/            GPS, IMU, and barometer interfaces
 |-- telemetry/          LoRa/XBee telemetry packet generation/sending
+|-- vision/             Undistortion, pose normalization, features, matching
 |-- tests/              Simulation and module tests
 |-- config.py           Runtime configuration
 |-- main.py             Main mission entry point
@@ -208,6 +218,7 @@ MAPPING_COVERAGE_GRID_M = 5.0
 ## Documentation
 
 - `docs/USER_MANUAL.md` - operator manual and workflow
+- `docs/architecture_pose_normalization.md` - V1 pose-assisted mapping design
 - `docs/flight_flow.md` - mission state sequence
 - `docs/wiring_plan.md` - wiring notes
 - `docs/pin_map.md` - Raspberry Pi pin assignments

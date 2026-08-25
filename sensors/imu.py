@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class BaseIMU(ABC):
     @abstractmethod
     def read(self) -> dict:
-        """Return dict with roll, pitch, yaw (degrees)."""
+        """Return attitude in degrees and angular velocity in degrees/second."""
 
     @abstractmethod
     def close(self) -> None:
@@ -34,13 +34,29 @@ class MockIMU(BaseIMU):
 
     def __init__(self) -> None:
         self._t = 0.0
+        self._last_roll = 0.0
+        self._last_pitch = 0.0
+        self._last_yaw = 0.0
 
     def read(self) -> dict:
         self._t += 0.1
+        roll = 5.0 * math.sin(self._t) + random.uniform(-0.5, 0.5)
+        pitch = 3.0 * math.cos(self._t * 0.7) + random.uniform(-0.5, 0.5)
+        yaw = (self._t * 10.0 + random.uniform(-1.0, 1.0)) % 360.0
+        gyro_x = (roll - self._last_roll) / 0.1
+        gyro_y = (pitch - self._last_pitch) / 0.1
+        yaw_delta = ((yaw - self._last_yaw + 180.0) % 360.0) - 180.0
+        gyro_z = yaw_delta / 0.1
+        self._last_roll = roll
+        self._last_pitch = pitch
+        self._last_yaw = yaw
         return {
-            "roll": 5.0 * math.sin(self._t) + random.uniform(-0.5, 0.5),
-            "pitch": 3.0 * math.cos(self._t * 0.7) + random.uniform(-0.5, 0.5),
-            "yaw": (self._t * 10.0 + random.uniform(-1.0, 1.0)) % 360.0,
+            "roll": roll,
+            "pitch": pitch,
+            "yaw": yaw,
+            "gyro_x": gyro_x,
+            "gyro_y": gyro_y,
+            "gyro_z": gyro_z,
         }
 
     def close(self) -> None:
@@ -48,16 +64,60 @@ class MockIMU(BaseIMU):
 
 
 class RealIMU(BaseIMU):
-    """Placeholder for I2C IMU at config.IMU_ADDRESS."""
+    """BNO085 IMU on Garud HAT I2C1."""
 
     def __init__(self) -> None:
-        logger.warning(
-            "RealIMU is a stub — connect I2C address 0x%02X when hardware is ready.",
-            config.IMU_ADDRESS,
+        import bus_manager
+        from adafruit_bno08x import (
+            BNO_REPORT_ACCELEROMETER,
+            BNO_REPORT_GYROSCOPE,
+            BNO_REPORT_ROTATION_VECTOR,
+        )
+        from adafruit_bno08x.i2c import BNO08X_I2C
+
+        self._bno = BNO08X_I2C(
+            bus_manager.get_i2c(),
+            address=config.BNO085_I2C_ADDRESS,
+        )
+        self._bno.enable_feature(BNO_REPORT_ACCELEROMETER)
+        self._bno.enable_feature(BNO_REPORT_GYROSCOPE)
+        self._bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
+        logger.info(
+            "BNO085 initialized on I2C address 0x%02X.",
+            config.BNO085_I2C_ADDRESS,
         )
 
+    @staticmethod
+    def _quat_to_euler(i: float, j: float, k: float, real: float) -> tuple[float, float, float]:
+        """Convert BNO085 quaternion (i, j, k, real) to roll/pitch/yaw degrees."""
+        x, y, z, w = i, j, k, real
+        sinr_cosp = 2.0 * (w * x + y * z)
+        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+        roll = math.degrees(math.atan2(sinr_cosp, cosr_cosp))
+
+        sinp = 2.0 * (w * y - z * x)
+        if abs(sinp) >= 1.0:
+            pitch = math.degrees(math.copysign(math.pi / 2.0, sinp))
+        else:
+            pitch = math.degrees(math.asin(sinp))
+
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        yaw = math.degrees(math.atan2(siny_cosp, cosy_cosp)) % 360.0
+        return roll, pitch, yaw
+
     def read(self) -> dict:
-        return {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
+        gyro_x, gyro_y, gyro_z = self._bno.gyro
+        quat_i, quat_j, quat_k, quat_real = self._bno.quaternion
+        roll, pitch, yaw = self._quat_to_euler(quat_i, quat_j, quat_k, quat_real)
+        return {
+            "roll": roll,
+            "pitch": pitch,
+            "yaw": yaw,
+            "gyro_x": math.degrees(gyro_x),
+            "gyro_y": math.degrees(gyro_y),
+            "gyro_z": math.degrees(gyro_z),
+        }
 
     def close(self) -> None:
         pass
@@ -82,6 +142,9 @@ def imu_worker(shared: SharedData, stop_event: threading.Event) -> None:
                     roll=reading["roll"],
                     pitch=reading["pitch"],
                     yaw=reading["yaw"],
+                    gyro_x=reading.get("gyro_x", 0.0),
+                    gyro_y=reading.get("gyro_y", 0.0),
+                    gyro_z=reading.get("gyro_z", 0.0),
                     imu_ok=True,
                 )
             except Exception as exc:

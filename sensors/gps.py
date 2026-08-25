@@ -61,31 +61,41 @@ class MockGPS(BaseGPS):
 
 
 class RealGPS(BaseGPS):
-    """
-    Placeholder for real GPS via pyserial + pynmea2.
-
-    Implement connect/read when the GPS module arrives.
-    """
+    """NEO-M8N GPS through the Garud HAT SC16IS750 SPI UART bridge."""
 
     def __init__(self) -> None:
-        self._serial = None
-        logger.warning(
-            "RealGPS is a stub — connect %s @ %d when hardware is ready.",
-            config.GPS_PORT,
-            config.GPS_BAUDRATE,
-        )
+        import bus_manager
+        from sensors.gps_m8n import GPSM8N
 
-    def read(self) -> dict:
-        return {
+        self._gps = GPSM8N(bus_manager.get_spi())
+        self._last = {
             "latitude": 0.0,
             "longitude": 0.0,
             "altitude": 0.0,
             "fix_ok": False,
         }
+        logger.info(
+            "GPS M8N initialized through SC16IS750 on SPI0 CE1/GPIO%d @ %d.",
+            config.GPS_SC16IS750_CS_PIN,
+            config.GPS_BAUDRATE,
+        )
+
+    def read(self) -> dict:
+        fix = self._gps.read_fix(timeout_s=1.0)
+        if not fix:
+            return {**self._last, "fix_ok": False}
+
+        if fix.get("lat") is not None:
+            self._last["latitude"] = fix["lat"]
+        if fix.get("lon") is not None:
+            self._last["longitude"] = fix["lon"]
+        if fix.get("altitude_m") is not None:
+            self._last["altitude"] = fix["altitude_m"]
+        self._last["fix_ok"] = bool(fix.get("fixed"))
+        return dict(self._last)
 
     def close(self) -> None:
-        if self._serial:
-            self._serial.close()
+        pass
 
 
 def create_gps() -> BaseGPS:

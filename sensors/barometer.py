@@ -52,16 +52,27 @@ class MockBarometer(BaseBarometer):
 
 
 class RealBarometer(BaseBarometer):
-    """Placeholder for I2C barometer at config.BAROMETER_ADDRESS."""
+    """BMP388 barometer on Garud HAT SPI0 CE0."""
 
     def __init__(self) -> None:
-        logger.warning(
-            "RealBarometer is a stub — connect I2C address 0x%02X when ready.",
-            config.BAROMETER_ADDRESS,
-        )
+        import bus_manager
+        import digitalio
+        from adafruit_bmp3xx import BMP3XX_SPI
+
+        cs = digitalio.DigitalInOut(config.BMP388_CS)
+        self._bmp = BMP3XX_SPI(bus_manager.get_spi(), cs)
+        self._bmp.sea_level_pressure = 1013.25
+        self._bmp.pressure_oversampling = 8
+        self._bmp.temperature_oversampling = 2
+        self._bmp.filter_coefficient = 2
+        logger.info("BMP388 initialized on SPI0 CE0/GPIO%d.", config.BMP388_CS_PIN)
 
     def read(self) -> dict:
-        return {"altitude": 0.0, "pressure": 1013.25}
+        return {
+            "altitude": self._bmp.altitude,
+            "pressure": self._bmp.pressure,
+            "temperature": self._bmp.temperature,
+        }
 
     def close(self) -> None:
         pass

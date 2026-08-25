@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 import config
 from camera.mock_camera import MockCamera, RealCamera
@@ -38,7 +39,11 @@ def camera_worker(shared: SharedData, stop_event: threading.Event) -> None:
                     latitude=snap.latitude,
                     longitude=snap.longitude,
                 )
-                shared.update(image_name=filename, camera_ok=True)
+                shared.update(
+                    image_name=filename,
+                    image_timestamp=time.time(),
+                    camera_ok=True,
+                )
                 logger.info("Image captured: %s", filename)
             except Exception as exc:
                 logger.error("Camera capture error: %s", exc)
