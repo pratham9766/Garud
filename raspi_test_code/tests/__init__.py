@@ -1,1 +1,0 @@
-"""Interactive hardware test routines."""
