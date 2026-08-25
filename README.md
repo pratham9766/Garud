@@ -12,9 +12,9 @@ tested without connected flight hardware.
 
 The simulation path is the primary working flow. It can generate a fake descent,
 capture mock images, log telemetry, and export map products without hardware.
-Real hardware bring-up scripts and configuration hooks are included for Raspberry
-Pi testing, but the flight hardware path should be verified end-to-end before
-mission use.
+Real hardware adapters are wired for the tested Garud HAT reference
+configuration. Run the hardware checks on the Raspberry Pi before mission use,
+because desktop development still defaults to mock hardware.
 
 ## Features
 
@@ -30,6 +30,7 @@ mission use.
 - Interactive Folium HTML map export.
 - Google Earth compatible KML export.
 - Estimated camera ground footprints and unique coverage area.
+- Garud HAT hardware adapters for BNO085, BMP388, GPS-over-SC16IS750, XBee, and PCA9685 gimbal control.
 - Standalone hardware bring-up scripts for Raspberry Pi testing.
 
 ## Tech Stack
@@ -82,8 +83,8 @@ ground_mapping_payload/
 ## Hardware Target
 
 - Python 3.9 or newer
-- Raspberry Pi 4 recommended for hardware mode
-- Optional hardware: GPS, camera, BMP388 barometer, BNO085 IMU, PCA9685 gimbal, LoRa radio
+- Raspberry Pi 5 target for hardware mode
+- Garud HAT with BNO085 IMU, BMP388 barometer, NEO-M8N GPS through SC16IS750, PCA9685 gimbal, XBee telemetry, and camera
 
 Python packages are listed in `requirements.txt`.
 
@@ -92,8 +93,8 @@ Python packages are listed in `requirements.txt`.
 Clone the repository:
 
 ```bash
-git clone https://github.com/pratham9766/Garuda_TARSR.git
-cd Garuda_TARSR
+git clone https://github.com/TARSR/GARUD.git
+cd GARUD
 ```
 
 Create a virtual environment:
@@ -185,13 +186,13 @@ generated logs, images, and maps are ignored by Git.
 ## CSV Format
 
 ```text
-timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,pitch,yaw,image_name,battery,status
+timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,pitch,yaw,gyro_x,gyro_y,gyro_z,image_name,image_timestamp,battery,status
 ```
 
 ## Configuration
 
 Edit `config.py` to enable/disable modules, switch between mock and real
-hardware, adjust capture/logging intervals, and set serial/I2C/SPI device values.
+hardware, adjust capture/logging intervals, and set Garud HAT bus/pin values.
 
 Important settings:
 
@@ -200,12 +201,16 @@ USE_MOCK_HARDWARE = True
 ENABLE_CAMERA = True
 ENABLE_GPS = True
 ENABLE_MAPPING = True
-GPS_PORT = "/dev/ttyUSB0"
-XBEE_PORT = "/dev/ttyUSB1"
+GPS_TRANSPORT = "SC16IS750_SPI"
+XBEE_SERIAL_PORT = "/dev/ttyAMA0"
+BNO085_I2C_ADDRESS = 0x4A
+BMP388_CS_PIN = 8
+GPS_SC16IS750_CS_PIN = 7
+PCA9685_I2C_ADDRESS = 0x40
 ```
 
-Set `USE_MOCK_HARDWARE = False` only after real hardware drivers and device
-ports are ready.
+Set `USE_MOCK_HARDWARE = False` on the Raspberry Pi after installing
+`requirements.txt` and confirming the HAT wiring.
 
 Mapping footprint settings:
 
@@ -227,17 +232,19 @@ MAPPING_COVERAGE_GRID_M = 5.0
 
 ## Hardware Mode Notes
 
-The real hardware path is scaffolded, but several real device classes are still
-placeholders. Before flight use, implement and verify:
-
 | File | Class / area |
 | --- | --- |
-| `sensors/gps.py` | `RealGPS` NMEA serial reader |
-| `sensors/imu.py` | Real BNO085 SPI reader |
-| `sensors/barometer.py` | Real BMP388 SPI reader |
+| `bus_manager.py` | Shared I2C1/SPI0 bus initialization |
+| `sensors/gps.py` | `RealGPS` using NEO-M8N through SC16IS750 on SPI0 CE1 |
+| `sensors/imu.py` | `RealIMU` using BNO085 on I2C address `0x4A` |
+| `sensors/barometer.py` | `RealBarometer` using BMP388 on SPI0 CE0 |
 | `camera/mock_camera.py` | Real Raspberry Pi camera capture |
-| `telemetry/xbee_sender.py` | Real LoRa/XBee serial transmitter |
-| `gimbal/servo_control.py` | Real PCA9685 servo control |
+| `telemetry/xbee_sender.py` | `RealTelemetry` using XBee on `/dev/ttyAMA0` |
+| `gimbal/servo_control.py` | `RealGimbal` using PCA9685 servo control |
+
+The mapping, logging, telemetry, and post-flight processing pipelines are kept
+independent of the hardware adapters. Mock mode remains the default for local
+development and CI-style checks.
 
 ## License
 
