@@ -64,7 +64,8 @@ def run_pose_assisted_stage(
         if quality.is_usable:
             usable_images.append(metadata)
 
-    graph = build_candidate_graph(tuple(usable_images))
+    quality_by_name = {quality.image_name: quality for quality in qualities}
+    graph = build_candidate_graph(tuple(usable_images), qualities=quality_by_name)
     return ProcessingSummary(
         image_count=len(mission.images),
         usable_image_count=len(usable_images),
@@ -74,4 +75,3 @@ def run_pose_assisted_stage(
         pose_priors=tuple(pose_priors),
         graph=graph,
     )
-

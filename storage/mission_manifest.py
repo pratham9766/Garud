@@ -54,6 +54,16 @@ class ImageMetadata:
     gyro_y_dps: float
     gyro_z_dps: float
     camera: CameraModel
+    image_timestamp: float = 0.0
+    mission_state: str = ""
+
+    @property
+    def gps_altitude(self) -> float:
+        return self.gps_altitude_m
+
+    @property
+    def baro_altitude(self) -> float:
+        return self.baro_altitude_m
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -75,7 +85,12 @@ def load_image_metadata(
     image_dir: Path | None = None,
     camera: CameraModel | None = None,
 ) -> list[ImageMetadata]:
-    """Load synchronized image records from a mission CSV log."""
+    """Load synchronized image records from a mission CSV log.
+
+    The onboard logger stores only rows of shared state. This loader keeps one
+    metadata record per image and chooses the row closest to the camera capture
+    timestamp, avoiding decoded image data entirely.
+    """
     image_dir = image_dir or config.IMAGE_SAVE_PATH
     camera = camera or CameraModel()
     df = pd.read_csv(csv_path)
@@ -85,10 +100,24 @@ def load_image_metadata(
     rows = df[
         df["image_name"].notna() & (df["image_name"].astype(str).str.len() > 0)
     ]
+    if "image_timestamp" not in rows.columns:
+        rows = rows.copy()
+        rows["image_timestamp"] = rows.get("timestamp", 0.0)
+
     records: list[ImageMetadata] = []
-    for _, row in rows.iterrows():
+    for image_name, group in rows.groupby(rows["image_name"].astype(str), sort=False):
+        group = group.copy()
+        group["_sync_target"] = group["image_timestamp"].apply(_number)
+        group["_sample_time"] = group["timestamp"].apply(_number)
+        target = _number(group.iloc[0].get("image_timestamp"), _number(group.iloc[0].get("timestamp")))
+        if target:
+            idx = (group["_sample_time"] - target).abs().idxmin()
+            row = group.loc[idx]
+        else:
+            row = group.iloc[0]
         image_name = str(row["image_name"])
-        timestamp = _number(row.get("image_timestamp"), _number(row.get("timestamp")))
+        image_timestamp = _number(row.get("image_timestamp"), _number(row.get("timestamp")))
+        timestamp = image_timestamp or _number(row.get("timestamp"))
         records.append(
             ImageMetadata(
                 image_name=image_name,
@@ -105,7 +134,8 @@ def load_image_metadata(
                 gyro_y_dps=_number(row.get("gyro_y")),
                 gyro_z_dps=_number(row.get("gyro_z")),
                 camera=camera,
+                image_timestamp=image_timestamp,
+                mission_state=str(row.get("state", "")),
             )
         )
     return records
-

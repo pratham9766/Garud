@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from storage.mission_manifest import ImageMetadata, load_image_metadata
+import pandas as pd
+
+import config
+from sensor_fusion.timestamp_sync import sync_image_rows
+from storage.mission_manifest import CameraModel, ImageMetadata
 
 
 @dataclass(frozen=True)
@@ -28,9 +32,45 @@ REQUIRED_COLUMNS = {
 }
 
 
+def _number(value: object, default: float = 0.0) -> float:
+    try:
+        if pd.isna(value):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def load_mission_data(csv_path: Path, image_dir: Path | None = None) -> MissionData:
     """Load mission data from the CSV log and associated image directory."""
-    records = tuple(load_image_metadata(csv_path, image_dir=image_dir))
+    image_dir = image_dir or config.IMAGE_SAVE_PATH
+    df = pd.read_csv(csv_path)
+    camera = CameraModel()
+    records: list[ImageMetadata] = []
+    for image_name, row, sync in sync_image_rows(
+        df,
+        interpolate=config.MAPPING_INTERPOLATE_SENSOR_TIMELINE,
+    ):
+        records.append(
+            ImageMetadata(
+                image_name=image_name,
+                image_path=image_dir / image_name,
+                timestamp=sync.sample_timestamp,
+                latitude=_number(row.get("latitude")),
+                longitude=_number(row.get("longitude")),
+                gps_altitude_m=_number(row.get("gps_altitude")),
+                baro_altitude_m=_number(row.get("baro_altitude")),
+                roll_deg=_number(row.get("roll")),
+                pitch_deg=_number(row.get("pitch")),
+                yaw_deg=_number(row.get("yaw")),
+                gyro_x_dps=_number(row.get("gyro_x")),
+                gyro_y_dps=_number(row.get("gyro_y")),
+                gyro_z_dps=_number(row.get("gyro_z")),
+                camera=camera,
+                image_timestamp=sync.image_timestamp,
+                mission_state=str(row.get("state", "")),
+            )
+        )
     return MissionData(csv_path=Path(csv_path), images=records)
 
 
@@ -61,4 +101,3 @@ def validate_mission_data(mission: MissionData) -> list[str]:
         issues.append(f"Images without nonzero attitude: {len(missing_attitude)}")
 
     return issues
-

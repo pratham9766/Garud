@@ -1,4 +1,4 @@
-"""Feature matching and geometric verification."""
+"""Feature matching with optional backends and classical fallbacks."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ class MatchResult:
     matches: tuple[cv2.DMatch, ...]
     inlier_mask: np.ndarray | None
     homography: np.ndarray | None
+    raw_match_count: int = 0
+    matcher_name: str = "FLANN/BF"
 
     @property
     def inlier_count(self) -> int:
@@ -59,6 +61,37 @@ def match_features(
     return tuple(good)
 
 
+def raw_knn_match_count(first: FeatureSet, second: FeatureSet) -> int:
+    """Return an inexpensive raw match upper bound for reporting."""
+    if first.descriptors is None or second.descriptors is None:
+        return 0
+    return min(len(first.descriptors), len(second.descriptors))
+
+
+class FeatureMatcher:
+    """Matcher abstraction with optional LightGlue placeholder and FLANN fallback."""
+
+    def __init__(self, preferred: str = "LIGHTGLUE", ratio: float = 0.75) -> None:
+        self.preferred = preferred.upper()
+        self.ratio = ratio
+        self.matcher_name = "SIFT_FLANN_OR_BF"
+        self.lightglue_available = self._detect_lightglue()
+
+    def _detect_lightglue(self) -> bool:
+        if self.preferred != "LIGHTGLUE":
+            return False
+        try:
+            import lightglue  # noqa: F401
+        except Exception:
+            return False
+        return True
+
+    def match(self, first: FeatureSet, second: FeatureSet) -> tuple[cv2.DMatch, ...]:
+        # LightGlue integration is intentionally optional. Until a compatible
+        # learned feature stack is configured, keep robust classical matching.
+        return match_features(first, second, ratio=self.ratio)
+
+
 def estimate_homography_ransac(
     first: FeatureSet,
     second: FeatureSet,
@@ -81,5 +114,5 @@ def estimate_homography_ransac(
         matches=matches,
         inlier_mask=mask,
         homography=homography,
+        raw_match_count=len(matches),
     )
-
