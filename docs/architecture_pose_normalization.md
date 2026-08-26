@@ -22,8 +22,12 @@ Stored mission data
 -> FLANN/BF matching
 -> Lowe ratio test
 -> RANSAC refinement
--> Warping and blending
--> Orthomosaic and report
+-> Multi-view feature tracks
+-> PyCOLMAP sparse SfM
+-> Global bundle adjustment
+-> Camera pose and sparse point export
+-> Optional dense MVS / DSM / orthorectification
+-> Report
 ```
 
 ## Pose Normalization
@@ -68,11 +72,23 @@ Implemented foundation:
 - RANSAC homography estimation
 - graph-based candidate relationships
 
+## V2 Sparse Reconstruction
+
+The V2 post-flight path imports GARUDA's verified feature graph into a COLMAP
+database through PyCOLMAP. It explicitly preserves mappings between filenames,
+GARUDA image order, COLMAP image IDs, feature indices, and match indices. When
+features are extracted on resized images, keypoints are scaled back into
+original image coordinates before insertion into COLMAP.
+
+Sparse reconstruction then runs through PyCOLMAP incremental mapping and global
+bundle adjustment. The current Wietrznia test registered all 25 selected images,
+produced 9,329 sparse 3D points, and reported a mean post-BA reprojection error
+of about 1.16 px.
+
 Still future work:
 
-- full orthomosaic blending pipeline
-- bundle adjustment
-- structure from motion
-- 3D reconstruction
+- GPU-backed dense MVS on a CUDA-capable reconstruction machine
+- DSM generation from the dense point cloud in a completed dense run
+- terrain-based orthorectification using optimized poses plus DSM
+- exposure compensation, seam optimization, and multiband blending for the final orthomosaic
 - semantic landing-zone detection
-

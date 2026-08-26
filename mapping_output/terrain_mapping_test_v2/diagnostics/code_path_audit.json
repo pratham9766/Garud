@@ -1,0 +1,15 @@
+{
+  "verified_matches_produced_by": "processing.run_dataset_test.match_and_verify -> diagnostics/verified_matches.csv",
+  "feature_tracks_stored": "diagnostics/feature_track_stats.json (built from verified pair matches)",
+  "sfm_backend_runs": "YES - processing.sfm_backend.PyColmapBackend imports GARUDA keypoints/matches into COLMAP database",
+  "pycolmap_import_success": "YES",
+  "sparse_reconstruction_produced": "YES - reconstruction/sparse/model and copied sparse binaries",
+  "bundle_adjustment_executed": "YES - PyCOLMAP global bundle adjustment completed",
+  "camera_poses_exported": "YES - reconstruction/camera_poses.csv",
+  "dense_backend_runs": "YES - processing.dense_backend.ColmapPatchMatchBackend runs undistort_images then attempts patch_match_stereo",
+  "dense_stage_result": "FAILED - CUDA unavailable for COLMAP PatchMatch",
+  "stitched_terrain_generator": "processing.run_dataset_test.build_mosaic",
+  "final_mosaic_uses_optimized_sfm_camera_poses": "NO",
+  "reason_final_not_orthomosaic": "Dense MVS failed before DSM, so terrain-based orthorectification could not be generated",
+  "no_chained_homography_claim": "global_pose_preview is preserved as preview only; true orthomosaic skipped"
+}

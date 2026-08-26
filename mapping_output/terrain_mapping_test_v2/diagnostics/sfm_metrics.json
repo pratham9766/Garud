@@ -1,0 +1,11 @@
+{
+  "status": "SUCCESS",
+  "registered_images": 25,
+  "registration_rate": 1.0,
+  "sparse_points": 9329,
+  "mean_reprojection_error_after_ba": 1.1626129347099219,
+  "median_reprojection_error_after_ba": 1.1284946576209345,
+  "largest_component_images": 25,
+  "bundle_adjustment": "completed",
+  "message": "PyCOLMAP sparse reconstruction completed from imported GARUDA features."
+}

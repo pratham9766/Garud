@@ -16,6 +16,14 @@ Real hardware adapters are wired for the tested Garud HAT reference
 configuration. Run the hardware checks on the Raspberry Pi before mission use,
 because desktop development still defaults to mock hardware.
 
+Post-flight terrain reconstruction has a tested V2 path for external aerial
+datasets such as the Wietrznia OpenDroneMap DJI image set. The V2 path now
+executes GARUDA quality filtering, graph-based matching, multi-view track
+diagnostics, PyCOLMAP sparse SfM, and global bundle adjustment. Dense COLMAP
+PatchMatch is wired as a post-flight-only backend, but it requires CUDA; on the
+current Windows test machine dense MVS failed at that CUDA requirement, so DSM
+and true terrain orthorectification were skipped honestly.
+
 ## Features
 
 - Simulated GPS track near Pune, India.
@@ -27,6 +35,11 @@ because desktop development still defaults to mock hardware.
 - IMU-assisted pose priors for post-flight image normalization.
 - Post-flight image quality scoring for blur, exposure, tilt, and motion.
 - Graph-based image relationship candidates for non-sequential matching.
+- Dataset-mode post-flight runner for DJI aerial image folders.
+- PyCOLMAP sparse SfM import from GARUDA verified features and matches.
+- Bundle-adjusted camera pose export and sparse reconstruction diagnostics.
+- Optional COLMAP dense MVS adapter isolated from flight runtime.
+- DSM rasterization from dense PLY point clouds when dense MVS succeeds.
 - Interactive Folium HTML map export.
 - Google Earth compatible KML export.
 - Estimated camera ground footprints and unique coverage area.
@@ -44,16 +57,32 @@ because desktop development still defaults to mock hardware.
 
 ## Mapping Scope
 
-The implemented mapping is transitioning from GPS footprint visualization to a
-pose-assisted photogrammetry framework. The current working map products still
-plot the payload path, geotagged image capture points, and estimated ground
-rectangles. The new post-flight processing scaffold validates stored mission
-data, scores image quality, computes IMU-derived pose priors, and builds an
-image graph for later SIFT/FLANN/RANSAC refinement.
+The mapping stack is split into flight-safe capture/logging code and expensive
+post-flight reconstruction code. Flight runtime still records images and
+metadata only. Heavy work stays under `processing/`, `mapping/`, `vision/`,
+`sensor_fusion/`, and `storage/`.
 
-The repository now contains the V1 foundation for image stitching, but final
-orthomosaic generation, bundle adjustment, SLAM, and 3D reconstruction are not
-yet complete.
+The current V2 post-flight pipeline can run on a folder of DJI images:
+
+```text
+image dataset
+-> quality scoring
+-> temporal/GPS candidate graph
+-> SIFT feature extraction and cache
+-> FLANN/BF matching
+-> Essential/Fundamental/Homography verification
+-> multi-view track diagnostics
+-> PyCOLMAP database import
+-> incremental sparse SfM
+-> global bundle adjustment
+-> camera pose and sparse model export
+-> optional dense PatchMatch and DSM if CUDA is available
+```
+
+The preview JPEGs are diagnostic products. A true orthomosaic is only claimed
+when dense MVS, DSM generation, and terrain-based orthorectification complete.
+On the latest Wietrznia test, sparse SfM succeeded and dense MVS was blocked by
+missing CUDA.
 
 ## Repository Layout
 
@@ -179,9 +208,65 @@ python hardware_tests/test_all_sensors_status.py
 | `data/maps/flight_path.html` | Interactive flight-path map |
 | `data/maps/flight_path.kml` | Google Earth KML export |
 | `data/logs/hardware_tests/` | Hardware test logs |
+| `mapping_output/terrain_mapping_test_v2/` | Checked-in Wietrznia V2 result images and diagnostics |
 
 Runtime output folders are kept in the repository with `.gitkeep` files, while
 generated logs, images, and maps are ignored by Git.
+
+## Post-Flight Dataset Reconstruction
+
+Install normal flight/runtime dependencies first:
+
+```bash
+pip install -r requirements.txt
+```
+
+Install heavy post-flight dependencies only on the development/reconstruction
+machine:
+
+```bash
+pip install -r requirements-postflight.txt
+```
+
+Run a small Wietrznia-style dataset test:
+
+```bash
+python -m processing.run_dataset_test ^
+    --images "D:\RESOURCES\Terrain dataset\images" ^
+    --output "output\terrain_mapping_test_v2\small_25" ^
+    --profile fast ^
+    --max-images 25 ^
+    --neighbors 4 ^
+    --feature-max-dim 1024 ^
+    --enable-dense ^
+    --dense-max-image-size 900
+```
+
+Latest checked-in V2 test summary:
+
+```text
+Images selected: 25
+Good images: 25
+Candidate edges: 53
+Verified edges: 53
+Sparse SfM: SUCCESS
+Registered images: 25 / 25
+Sparse points: 9,329
+Mean reprojection error after BA: 1.163 px
+Dense MVS: FAILED - CUDA unavailable
+DSM / true orthomosaic: SKIPPED
+Overall: PARTIAL
+```
+
+Important outputs:
+
+| Path | Description |
+| --- | --- |
+| `mapping_output/terrain_mapping_test_v2/final/global_pose_preview.jpg` | Sparse reconstruction and camera trajectory preview |
+| `mapping_output/terrain_mapping_test_v2/final/before_after_comparison.jpg` | Baseline vs V2 diagnostic comparison |
+| `mapping_output/terrain_mapping_test_v2/diagnostics/reconstruction_report.json` | Full run report |
+| `mapping_output/terrain_mapping_test_v2/diagnostics/dense_metrics.json` | Dense MVS status and CUDA blocker |
+| `mapping_output/terrain_mapping_test_v2/diagnostics/camera_poses.csv` | Bundle-adjusted camera pose export |
 
 ## CSV Format
 
@@ -224,6 +309,7 @@ MAPPING_COVERAGE_GRID_M = 5.0
 
 - `docs/USER_MANUAL.md` - operator manual and workflow
 - `docs/architecture_pose_normalization.md` - V1 pose-assisted mapping design
+- `docs/postflight_terrain_mapping.md` - V2 dataset reconstruction workflow and current limitations
 - `docs/flight_flow.md` - mission state sequence
 - `docs/wiring_plan.md` - wiring notes
 - `docs/pin_map.md` - Raspberry Pi pin assignments

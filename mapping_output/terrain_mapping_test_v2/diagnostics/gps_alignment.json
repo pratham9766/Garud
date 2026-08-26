@@ -1,0 +1,8 @@
+{
+  "available": false,
+  "observations": 0,
+  "used": 0,
+  "rejected": 0,
+  "rmse": null,
+  "message": "No EXIF GPS available in this dataset copy."
+}

@@ -1,0 +1,8 @@
+{
+  "status": "FAILED",
+  "dense_points": 0,
+  "runtime": 85.8857527999935,
+  "output_path": "D:\\Pratham\\GARUDA-cansat\\output\\terrain_mapping_test_v2\\small_25\\reconstruction\\dense\\fused.ply",
+  "output_size_bytes": 0,
+  "message": "COLMAP dense reconstruction failed: [mvs.cc:261] Dense stereo reconstruction requires CUDA, which is not available on your system."
+}

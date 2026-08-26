@@ -178,6 +178,10 @@ def build_candidate_graph(
     if not image_list:
         return graph
 
+    has_gps = any(
+        abs(image.latitude) > 1e-9 and abs(image.longitude) > 1e-9
+        for image in image_list
+    )
     ref_lat = next((img.latitude for img in image_list if img.latitude), image_list[0].latitude)
     ref_lon = next((img.longitude for img in image_list if img.longitude), image_list[0].longitude)
     footprints = {
@@ -198,8 +202,9 @@ def build_candidate_graph(
         )
 
     spatial: dict[tuple[int, int], list[int]] = {}
-    for idx, image in enumerate(image_list):
-        spatial.setdefault(_spatial_cell(image, ref_lat, ref_lon), []).append(idx)
+    if has_gps:
+        for idx, image in enumerate(image_list):
+            spatial.setdefault(_spatial_cell(image, ref_lat, ref_lon), []).append(idx)
 
     candidates_by_image: dict[int, list[ImageEdge]] = {
         idx: [] for idx in range(len(image_list))
@@ -265,12 +270,17 @@ def build_candidate_graph(
         candidates_by_image[b].append(edge)
 
     for idx, image in enumerate(image_list):
-        cell = _spatial_cell(image, ref_lat, ref_lon)
-        for neighbor_cell in _neighbor_cells(cell):
-            for other_idx in spatial.get(neighbor_cell, []):
-                if other_idx > idx:
-                    consider(idx, other_idx, "spatial")
-        for offset in range(1, config.MAPPING_TEMPORAL_NEIGHBORS + 1):
+        if has_gps:
+            cell = _spatial_cell(image, ref_lat, ref_lon)
+            for neighbor_cell in _neighbor_cells(cell):
+                for other_idx in spatial.get(neighbor_cell, []):
+                    if other_idx > idx:
+                        consider(idx, other_idx, "spatial")
+        temporal_window = config.MAPPING_TEMPORAL_NEIGHBORS if has_gps else max(
+            config.MAPPING_TEMPORAL_NEIGHBORS,
+            max_neighbors_per_image,
+        )
+        for offset in range(1, temporal_window + 1):
             if idx + offset < len(image_list):
                 consider(idx, idx + offset, "temporal")
 

@@ -1,0 +1,32 @@
+{
+  "before": {
+    "method": "pairwise_homography_mosaic",
+    "images_used": 16,
+    "registered_images": 0,
+    "verified_graph_edges": 83,
+    "reprojection_error_px": null,
+    "sparse_points": 0,
+    "dense_points": 0,
+    "gps_alignment_rmse_m": null,
+    "output_coverage_megapixels": 0.924,
+    "diagnosed_ghosting": "visible duplicated roads/paths and frame seams"
+  },
+  "after": {
+    "method": "pycolmap_global_sfm_plus_existing_mosaic_preview",
+    "registered_images": 25,
+    "registration_rate": 1.0,
+    "verified_graph_edges": 53,
+    "mean_reprojection_error_px": 1.1626129347099219,
+    "median_reprojection_error_px": 1.1284946576209345,
+    "sparse_points": 9329,
+    "dense_points": 0,
+    "gps_alignment_rmse_m": null,
+    "output_coverage_megapixels": 0.74,
+    "diagnosed_ghosting": "not fully solved; dense DSM orthorectification is still skipped"
+  },
+  "blockers": [
+    "No EXIF GPS was available in the visible dataset copy, so GPS/global alignment could not run.",
+    "Dense COLMAP PatchMatch/DSM/true orthorectification is not implemented in this run.",
+    "The visual after image is still the bounded mosaic preview; the new successful upgrade is sparse global SfM and bundle adjustment."
+  ]
+}

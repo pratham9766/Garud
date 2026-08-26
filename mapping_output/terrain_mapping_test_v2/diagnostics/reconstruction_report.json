@@ -1,0 +1,120 @@
+{
+  "test_name": "GARUDA TERRAIN MAPPING DATASET TEST",
+  "dataset": {
+    "path": "D:\\RESOURCES\\Terrain dataset\\images",
+    "total_images": 225,
+    "selected_images": 25,
+    "image_dimensions": "4000x3000",
+    "exif_gps_available": false,
+    "exif_altitude_available": false,
+    "exif_timestamp_available": false
+  },
+  "quality": {
+    "good": 25,
+    "marginal": 0,
+    "rejected": 0
+  },
+  "candidate_graph": {
+    "candidate_edges": 53,
+    "verified_edges": 53
+  },
+  "tracks": {
+    "total_tracks": 18448,
+    "mean_track_length": 2.9912727666955767,
+    "median_track_length": 3.0,
+    "max_track_length": 16,
+    "tracks_rejected_conflicts": 343,
+    "tracks_rejected_short": 0
+  },
+  "feature_backend": {
+    "backend": "SIFT",
+    "features_per_image": 4000.24,
+    "elapsed_seconds": 3.101354700003867,
+    "cache_hits": 25,
+    "cache_misses": 0
+  },
+  "matcher_backend": "SIFT_FLANN_OR_BF",
+  "sfm": {
+    "success": true,
+    "registered_images": 25,
+    "registration_rate": 1.0,
+    "sparse_points": 9329,
+    "mean_reprojection_error": 1.1626129347099219,
+    "median_reprojection_error": 1.1284946576209345,
+    "largest_component_images": 25,
+    "message": "PyCOLMAP sparse reconstruction completed from imported GARUDA features."
+  },
+  "dense_mvs": {
+    "status": "FAILED",
+    "dense_points": 0,
+    "runtime": 85.8857527999935,
+    "output_path": "D:\\Pratham\\GARUDA-cansat\\output\\terrain_mapping_test_v2\\small_25\\reconstruction\\dense\\fused.ply",
+    "output_size_bytes": 0,
+    "message": "COLMAP dense reconstruction failed: [mvs.cc:261] Dense stereo reconstruction requires CUDA, which is not available on your system."
+  },
+  "dsm": {
+    "status": "SKIPPED",
+    "path": null,
+    "width": 0,
+    "height": 0,
+    "resolution": 0.0,
+    "message": "DSM skipped because dense reconstruction did not succeed."
+  },
+  "gps_alignment": {
+    "available": false,
+    "observations": 0,
+    "used": 0,
+    "rejected": 0,
+    "rmse": null,
+    "message": "No EXIF GPS available in this dataset copy."
+  },
+  "combined_image": {
+    "status": "SUCCESS",
+    "path": "D:\\Pratham\\GARUDA-cansat\\output\\terrain_mapping_test_v2\\small_25\\final\\stitched_terrain.jpg",
+    "success": true,
+    "type": "mosaic_preview",
+    "contributors": 12,
+    "connected_images": 25,
+    "width": 548,
+    "height": 1351,
+    "megapixels": 0.74,
+    "coverage_increase_estimate": 3.651,
+    "canvas_scale": 1.0
+  },
+  "dense_reconstruction": "FAILED",
+  "true_orthomosaic": "SKIPPED",
+  "runtime": {
+    "elapsed_seconds": {
+      "dataset_loading": 76.21842319999996,
+      "quality_scoring": 12.265323900006479,
+      "candidate_graph": 0.04815539999981411,
+      "feature_extraction": 3.1076590000011493,
+      "geometric_verification": 19.76413740000862,
+      "sfm": 41.54374870000174,
+      "dense_mvs": 85.8859467000002,
+      "dsm": 2.1000014385208488e-06,
+      "combined_image": 7.065035399995395
+    },
+    "peak_ram": null
+  },
+  "ability_test": {
+    "multi_image_overlap_discovery": "PASS",
+    "non_sequential_matching": "PASS",
+    "rotation_robustness": "PARTIAL",
+    "scale_perspective_tolerance": "PASS",
+    "rejection_of_weak_pairs": "PARTIAL",
+    "recovery_around_missing_frames": "SKIPPED",
+    "sparse_reconstruction": "PASS",
+    "combined_terrain_generation": "PASS",
+    "graceful_behavior_without_imu": "PASS",
+    "controlled_ram_usage": "PARTIAL"
+  },
+  "overall": "PARTIAL",
+  "final_outputs": {
+    "stitched_terrain_before": "D:\\Pratham\\GARUDA-cansat\\output\\terrain_mapping_test_v2\\small_25\\final\\stitched_terrain_before.jpg",
+    "stitched_terrain_after": "D:\\Pratham\\GARUDA-cansat\\output\\terrain_mapping_test_v2\\small_25\\final\\stitched_terrain_after.jpg",
+    "before_after_comparison": "D:\\Pratham\\GARUDA-cansat\\output\\terrain_mapping_test_v2\\small_25\\final\\before_after_comparison.jpg",
+    "orthomosaic_preview": "D:\\Pratham\\GARUDA-cansat\\output\\terrain_mapping_test_v2\\small_25\\final\\orthomosaic_preview.jpg",
+    "orthomosaic_tif": null
+  }
+}
