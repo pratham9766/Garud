@@ -9,7 +9,7 @@ The payload software runs a set of background workers:
 
 - GPS worker updates latitude, longitude, and GPS altitude.
 - Barometer worker updates pressure-derived altitude.
-- IMU worker updates roll, pitch, and yaw.
+- IMU worker preserves raw BNO085 data and publishes final AHRS attitude.
 - Camera worker captures images at a fixed interval.
 - Gimbal worker stabilizes camera orientation.
 - Telemetry worker sends compact payload packets.
@@ -90,6 +90,28 @@ ENABLE_TELEMETRY = True
 ENABLE_MAPPING = True
 ENABLE_LOGGING = True
 ```
+
+AHRS defaults:
+
+```python
+ENABLE_AHRS = True
+AHRS_MODE = "BNO085"
+AHRS_RATE_HZ = 100
+AHRS_USE_MAGNETOMETER = True
+AHRS_ACCEL_REJECTION_ENABLED = True
+AHRS_MAG_REJECTION_ENABLED = True
+AHRS_MAX_SAMPLE_AGE_MS = 250.0
+AHRS_FAIL_COUNT_THRESHOLD = 5
+AHRS_RECOVERY_COUNT_THRESHOLD = 20
+AHRS_MADGWICK_BETA = 0.08
+AHRS_MAHONY_KP = 0.6
+AHRS_MAHONY_KI = 0.02
+```
+
+AHRS modes are `OFF`, `BNO085`, `MADGWICK`, `MAHONY`, and `AUTO`. `BNO085`
+uses the sensor's fused rotation-vector quaternion and is the operational
+default. `OFF` preserves the legacy raw roll/pitch/yaw path while marking AHRS
+invalid.
 
 Camera footprint settings:
 
@@ -172,8 +194,12 @@ generated.
 CSV columns:
 
 ```text
-timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,pitch,yaw,image_name,battery,status
+timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,pitch,yaw,gyro_x,gyro_y,gyro_z,image_name,image_timestamp,battery,status,...
 ```
+
+The original columns remain first. AHRS fields are appended, including source,
+validity, confidence, quaternion `(w,x,y,z)`, AHRS Euler outputs, sample age,
+correction flags, and preserved raw accel/mag/native quaternion values.
 
 ## 7. Hardware Bring-Up Procedure
 
@@ -184,7 +210,7 @@ Recommended order:
 
 1. Boot Raspberry Pi and confirm SSH access.
 2. Install Python dependencies.
-3. Confirm I2C devices for PCA9685/INA219.
+3. Confirm I2C devices for BNO085/PCA9685/INA219.
 4. Test camera.
 5. Test GPS.
 6. Test barometer.
@@ -203,6 +229,7 @@ python hardware_tests/test_camera_real.py
 python hardware_tests/test_gps_real.py
 python hardware_tests/test_barometer_real.py
 python hardware_tests/test_imu_real.py
+python hardware_tests/test_ahrs_real.py --mode bno085
 python hardware_tests/test_servo_real.py
 python hardware_tests/test_gimbal_real.py
 python hardware_tests/test_xbee_real.py
@@ -221,8 +248,8 @@ pip install adafruit-circuitpython-bmp280 adafruit-circuitpython-mpu6050 adafrui
 Enable interfaces with `raspi-config`:
 
 - Camera
-- I2C for PCA9685/INA219
-- SPI for BNO085/BMP388
+- I2C for BNO085/PCA9685/INA219
+- SPI for BMP388/SC16IS750
 - Serial as needed for GPS/LoRa
 
 ## 9. Pre-Flight Checklist
@@ -271,8 +298,21 @@ No telemetry:
 - Add new hardware drivers behind existing factory functions.
 - Test in mock mode before switching to real hardware.
 - Keep CSV column names stable because mapping and telemetry depend on them.
+- Treat AHRS attitude as a prior. Visual geometry checks may reject bad pose
+  assumptions after flight.
 - Extend mapping carefully; current mapping is GPS path visualization, not image
   stitching or orthomosaic generation.
+
+## 13. AHRS Coordinate Convention
+
+- Body axes: existing payload/camera convention; roll about X, pitch about Y,
+  yaw about Z. Mounting rotation is centralized in `IMU_TO_BODY_QUATERNION`.
+- Navigation/world axes: unchanged from existing mapping code.
+- Quaternion order: `(w, x, y, z)` internally and in logs.
+- BNO085 native order: `(x, y, z, w)` and converted explicitly.
+- Euler convention: degrees, `R = Rz(yaw) * Ry(pitch) * Rx(roll)`.
+- Gyro units: raw software filters use rad/s; shared/logged gyro fields are
+  deg/s.
 
 ## 12. Mapping Algorithm
 

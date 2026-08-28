@@ -56,6 +56,14 @@ class ImageMetadata:
     camera: CameraModel
     image_timestamp: float = 0.0
     mission_state: str = ""
+    ahrs_timestamp_ns: int = 0
+    ahrs_source: str = ""
+    ahrs_valid: bool = False
+    ahrs_confidence: str = ""
+    quat_w: float = 1.0
+    quat_x: float = 0.0
+    quat_y: float = 0.0
+    quat_z: float = 0.0
 
     @property
     def gps_altitude(self) -> float:
@@ -136,6 +144,14 @@ def load_image_metadata(
                 camera=camera,
                 image_timestamp=image_timestamp,
                 mission_state=str(row.get("state", "")),
+                ahrs_timestamp_ns=int(_number(row.get("ahrs_timestamp_ns"), 0.0)),
+                ahrs_source=str(row.get("ahrs_source", "")),
+                ahrs_valid=bool(_number(row.get("ahrs_valid"), 0.0)),
+                ahrs_confidence=str(row.get("ahrs_confidence", "")),
+                quat_w=_number(row.get("quat_w"), 1.0),
+                quat_x=_number(row.get("quat_x")),
+                quat_y=_number(row.get("quat_y")),
+                quat_z=_number(row.get("quat_z")),
             )
         )
     return records

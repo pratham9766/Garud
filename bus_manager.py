@@ -1,8 +1,8 @@
 """
-Shared hardware bus access for the Garud HAT.
+Shared hardware bus access for the GARUDA HAT.
 
-The BNO085 IMU and PCA9685 servo controller share I2C1. The BMP388 and
-SC16IS750 GPS UART bridge share SPI0 with different chip-select pins.
+BNO085, PCA9685, and INA219 share I2C1. BMP388 and the SC16IS750 GPS UART
+bridge share SPI0 with separate chip-select pins.
 """
 
 from __future__ import annotations

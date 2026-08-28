@@ -2,7 +2,7 @@
 
 Onboard and post-flight software for the GARUDA CanSat terrain and ground
 mapping payload. The payload runs on a Raspberry Pi 5, collects synchronized
-GPS, barometer, IMU, camera, gimbal, and telemetry data during descent, logs the
+GPS, barometer, AHRS/IMU, camera, gimbal, and telemetry data during descent, logs the
 mission to CSV, and processes recovered mission data after flight.
 
 The project currently defaults to simulation mode, so it can be developed and
@@ -29,10 +29,10 @@ and true terrain orthorectification were skipped honestly.
 - Simulated GPS track near Pune, India.
 - Simulated descent from roughly 700 m altitude.
 - Mock camera image capture with GPS text overlays.
-- Mock IMU, barometer, gimbal, and telemetry workers.
+- Mock IMU/AHRS, barometer, gimbal, and telemetry workers.
 - Threaded mission runtime with shared payload state.
-- CSV mission logging with image timestamps and angular velocity metadata.
-- IMU-assisted pose priors for post-flight image normalization.
+- CSV mission logging with image timestamps, angular velocity, raw IMU, and AHRS metadata.
+- AHRS-assisted pose priors for post-flight image normalization.
 - Post-flight image quality scoring for blur, exposure, tilt, and motion.
 - Graph-based image relationship candidates for non-sequential matching.
 - Dataset-mode post-flight runner for DJI aerial image folders.
@@ -43,7 +43,7 @@ and true terrain orthorectification were skipped honestly.
 - Interactive Folium HTML map export.
 - Google Earth compatible KML export.
 - Estimated camera ground footprints and unique coverage area.
-- Garud HAT hardware adapters for BNO085, BMP388, GPS-over-SC16IS750, XBee, and PCA9685 gimbal control.
+- Garud HAT hardware adapters for BNO085 on I2C1, BMP388 on SPI0, GPS-over-SC16IS750, XBee, and PCA9685 gimbal control.
 - Standalone hardware bring-up scripts for Raspberry Pi testing.
 
 ## Tech Stack
@@ -97,7 +97,7 @@ ground_mapping_payload/
 |-- logging_system/     CSV logger
 |-- mapping/            Fake flight data, HTML map, KML, geotag helpers
 |-- processing/         Offline mission validation and preprocessing
-|-- sensor_fusion/      IMU/GPS pose-prior helpers
+|-- sensor_fusion/      AHRS estimators, quaternion helpers, and pose priors
 |-- storage/            Mission manifest and metadata records
 |-- sensors/            GPS, IMU, and barometer interfaces
 |-- telemetry/          LoRa/XBee telemetry packet generation/sending
@@ -113,7 +113,7 @@ ground_mapping_payload/
 
 - Python 3.9 or newer
 - Raspberry Pi 5 target for hardware mode
-- Garud HAT with BNO085 IMU, BMP388 barometer, NEO-M8N GPS through SC16IS750, PCA9685 gimbal, XBee telemetry, and camera
+- Garud HAT with BNO085 IMU on I2C1, BMP388 barometer on SPI0 CS GPIO8, NEO-M8N GPS through SC16IS750, PCA9685 gimbal, XBee telemetry, and camera
 
 Python packages are listed in `requirements.txt`.
 
@@ -177,6 +177,7 @@ python tests/test_imu.py
 python tests/test_barometer.py
 python tests/test_camera.py
 python tests/test_telemetry.py
+python tests/test_ahrs.py
 ```
 
 Run all pytest-style tests if `pytest` is installed:
@@ -193,6 +194,7 @@ python hardware_tests/test_camera_real.py
 python hardware_tests/test_gps_real.py
 python hardware_tests/test_barometer_real.py
 python hardware_tests/test_imu_real.py
+python hardware_tests/test_ahrs_real.py --mode bno085
 python hardware_tests/test_servo_real.py
 python hardware_tests/test_gimbal_real.py
 python hardware_tests/test_xbee_real.py
@@ -271,7 +273,7 @@ Important outputs:
 ## CSV Format
 
 ```text
-timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,pitch,yaw,gyro_x,gyro_y,gyro_z,image_name,image_timestamp,battery,status
+timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,pitch,yaw,gyro_x,gyro_y,gyro_z,image_name,image_timestamp,battery,status,ahrs_enabled,ahrs_source,ahrs_valid,ahrs_healthy,ahrs_confidence,quat_w,quat_x,quat_y,quat_z,ahrs_roll,ahrs_pitch,ahrs_yaw,attitude_accuracy_rad,imu_sample_age_ms,accel_correction_active,mag_correction_active,ahrs_timestamp_ns,raw_accel_x,raw_accel_y,raw_accel_z,raw_mag_x,raw_mag_y,raw_mag_z,raw_quat_w,raw_quat_x,raw_quat_y,raw_quat_z
 ```
 
 ## Configuration
@@ -288,10 +290,18 @@ ENABLE_GPS = True
 ENABLE_MAPPING = True
 GPS_TRANSPORT = "SC16IS750_SPI"
 XBEE_SERIAL_PORT = "/dev/ttyAMA0"
+BNO085_TRANSPORT = "I2C"
 BNO085_I2C_ADDRESS = 0x4A
 BMP388_CS_PIN = 8
 GPS_SC16IS750_CS_PIN = 7
 PCA9685_I2C_ADDRESS = 0x40
+ULN2003_IN1_PIN = 25
+ULN2003_IN2_PIN = 24
+ULN2003_IN3_PIN = 23
+ULN2003_IN4_PIN = 18
+ENABLE_AHRS = True
+AHRS_MODE = "BNO085"
+AHRS_RATE_HZ = 100
 ```
 
 Set `USE_MOCK_HARDWARE = False` on the Raspberry Pi after installing
@@ -322,8 +332,8 @@ MAPPING_COVERAGE_GRID_M = 5.0
 | --- | --- |
 | `bus_manager.py` | Shared I2C1/SPI0 bus initialization |
 | `sensors/gps.py` | `RealGPS` using NEO-M8N through SC16IS750 on SPI0 CE1 |
-| `sensors/imu.py` | `RealIMU` using BNO085 on I2C address `0x4A` |
-| `sensors/barometer.py` | `RealBarometer` using BMP388 on SPI0 CE0 |
+| `sensors/imu.py` | `RealIMU` using BNO085 on I2C1 address `0x4A` |
+| `sensors/barometer.py` | `RealBarometer` using BMP388 on SPI0 with `CS_BMP` GPIO8 |
 | `camera/mock_camera.py` | Real Raspberry Pi camera capture |
 | `telemetry/xbee_sender.py` | `RealTelemetry` using XBee on `/dev/ttyAMA0` |
 | `gimbal/servo_control.py` | `RealGimbal` using PCA9685 servo control |

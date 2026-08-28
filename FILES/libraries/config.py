@@ -45,13 +45,13 @@ PCA9685_PWM_FREQ = 50           # Hz - standard analog servo rate
 
 # ---------------------------------------------------------------- #
 # ULN2003 unipolar stepper driver (e.g. 28BYJ-48)
-# Wired per the bench rig (independent of HAT J3):
-#     IN1=GPIO18, IN2=GPIO23, IN3=GPIO24, IN4=GPIO25
+# Pin mapping from the HAT schematic:
+#     IN1=GPIO25, IN2=GPIO24, IN3=GPIO23, IN4=GPIO18
 # ---------------------------------------------------------------- #
-ULN2003_IN1_PIN = board.D18
-ULN2003_IN2_PIN = board.D23
-ULN2003_IN3_PIN = board.D24
-ULN2003_IN4_PIN = board.D25
+ULN2003_IN1_PIN = board.D25
+ULN2003_IN2_PIN = board.D24
+ULN2003_IN3_PIN = board.D23
+ULN2003_IN4_PIN = board.D18
 STEPPER_STEP_DELAY = 0.002      # seconds between individual steps
 
 # ---------------------------------------------------------------- #

@@ -28,9 +28,10 @@ def main() -> int:
 
     print("Bus: I2C-1  (SDA=GPIO2 pin 3, SCL=GPIO3 pin 5)")
     print("Expected addresses:")
+    print(f"  BNO085 IMU/AHRS:          0x{config.BNO085_I2C_ADDRESS:02X}")
     print(f"  PCA9685 servo controller:  0x{config.SERVO_CONTROLLER_ADDRESS:02X}")
     print("  INA219 current sensor:      0x40 or 0x41 depending address jumpers")
-    print("  Note: BNO085 and BMP388 are SPI devices in Schema_Draft_2.pdf")
+    print("  Note: BMP388 remains on SPI0; it will not appear in this I2C scan.")
     print()
 
     if not is_raspberry_pi():

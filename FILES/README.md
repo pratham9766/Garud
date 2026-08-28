@@ -13,8 +13,9 @@ Modular Python codebase for the MRIC CanSat, matching the pin-out in
 | ULN2003 (Stepper) | GPIO | IN1=GPIO25, IN2=GPIO24, IN3=GPIO23, IN4=GPIO18                |
 | Buzzer            | GPIO | GPIO16 (through Q2 2N2222A)                                    |
 
-I2C1 is shared between the BNO085 and PCA9685 - this is fine, they sit
-at different addresses (`0x4A` and `0x40` by default).
+I2C1 is shared between the BNO085, PCA9685, and INA219 - this is fine as long
+as each device has a unique address (`0x4A` and `0x40` by default for BNO085
+and PCA9685).
 
 ## 1. Enable interfaces on the Pi
 
@@ -96,6 +97,6 @@ python3 test_codes/test_everything.py
   to avoid unnecessary current draw / heat on battery power.
 - Set `baro.set_sea_level_pressure(<local QNH>)` on the pad just
   before launch for accurate above-ground-level altitude readings.
-- The BNO085 also supports UART-RVC and SPI modes if you ever need to
-  move it off the shared I2C bus — the schematic breaks out `CS`/`INT`
-  on `JP2` for that purpose.
+- The BNO085 silicon also supports UART-RVC and SPI modes, but this payload
+  runtime is configured for I2C1 at `0x4A`. Do not move it off I2C without
+  deliberately changing `BNO085_TRANSPORT` and the corresponding hardware pins.

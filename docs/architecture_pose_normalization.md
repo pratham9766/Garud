@@ -2,21 +2,21 @@
 
 Garuda V1 no longer depends on perfect mechanical camera stabilization. The
 gimbal only keeps the camera approximately downward and damps extreme roll or
-pitch. Image orientation is recovered after flight from synchronized IMU,
+pitch. Image orientation is recovered after flight from synchronized AHRS/IMU,
 GPS, barometer, and camera metadata.
 
 ## Core Principle
 
-The IMU is a prior, not a final correction. Raw images remain recoverable, and
-OpenCV feature matching plus RANSAC must verify or reject every visual
-relationship before mosaicking.
+The AHRS/IMU attitude is a prior, not a final correction. Raw images remain
+recoverable, and OpenCV feature matching plus RANSAC must verify or reject
+every visual relationship before mosaicking.
 
 ```text
 Stored mission data
 -> Mission validation
 -> Image quality scoring
 -> Lens undistortion
--> IMU pose prior
+-> AHRS pose prior
 -> Candidate graph from GPS/time/yaw
 -> SIFT or ORB features
 -> FLANN/BF matching
@@ -33,11 +33,12 @@ Stored mission data
 ## Pose Normalization
 
 For each captured image, the system stores timestamp, GPS, barometer altitude,
-roll, pitch, yaw, angular velocity, and camera calibration. During processing,
-the camera model and IMU attitude produce a homography:
+roll, pitch, yaw, angular velocity, AHRS source/health, quaternion `(w,x,y,z)`,
+and camera calibration. During processing, the camera model and AHRS attitude
+produce a homography:
 
 ```text
-H_prior = K * R_imu^-1 * K^-1
+H_prior = K * R_ahrs^-1 * K^-1
 ```
 
 This homography may be used to create an expanded-canvas working image, but it
@@ -52,7 +53,7 @@ before expensive visual matching:
 - GPS distance
 - capture time separation
 - yaw difference
-- relative IMU pose prior
+- relative AHRS/IMU pose prior
 
 This allows Image A to match Image C even when Image B is poor, blurred, or
 partially overlapping.
@@ -65,7 +66,7 @@ Implemented foundation:
 - angular velocity logging
 - camera model records
 - image quality scoring
-- IMU pose-prior homographies
+- AHRS pose-prior homographies
 - expanded-canvas pose-normalization helper
 - SIFT-first feature detector with ORB fallback
 - FLANN/BF feature matching

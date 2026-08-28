@@ -34,6 +34,34 @@ ENABLE_STEERING = False  # Future: parachute/glider steering
 ENABLE_POST_FLIGHT_PROCESSING = True
 
 # ---------------------------------------------------------------------------
+# AHRS attitude estimation
+# ---------------------------------------------------------------------------
+ENABLE_AHRS = True
+AHRS_MODE = "BNO085"  # OFF, BNO085, MADGWICK, MAHONY, AUTO
+AHRS_RATE_HZ = 100
+AHRS_USE_MAGNETOMETER = True
+AHRS_ACCEL_REJECTION_ENABLED = True
+AHRS_MAG_REJECTION_ENABLED = True
+AHRS_MAX_SAMPLE_AGE_MS = 250.0
+AHRS_MIN_DT_SEC = 0.001
+AHRS_MAX_DT_SEC = 0.25
+AHRS_FAIL_COUNT_THRESHOLD = 5
+AHRS_RECOVERY_COUNT_THRESHOLD = 20
+AHRS_MADGWICK_BETA = 0.08
+AHRS_MAHONY_KP = 0.6
+AHRS_MAHONY_KI = 0.02
+AHRS_MAHONY_BIAS_LIMIT_RADS = 0.2
+AHRS_ACCEL_NORM_MIN_G = 0.70
+AHRS_ACCEL_NORM_MAX_G = 1.30
+AHRS_MAG_NORM_MIN_UT = 15.0
+AHRS_MAG_NORM_MAX_UT = 85.0
+AHRS_MAX_ANGULAR_JUMP_DEG = 120.0
+AHRS_BNO085_DEGRADED_ACCURACY_RAD = 0.6
+AHRS_AUTO_SOFTWARE_FALLBACK = "MADGWICK"
+AHRS_INIT_TIMEOUT_SEC = 2.0
+IMU_TO_BODY_QUATERNION = (1.0, 0.0, 0.0, 0.0)
+
+# ---------------------------------------------------------------------------
 # Simulation mode (default until hardware arrives)
 # ---------------------------------------------------------------------------
 USE_MOCK_HARDWARE = True
@@ -48,9 +76,9 @@ TELEMETRY_INTERVAL_SEC = 1.0
 # ---------------------------------------------------------------------------
 # Serial / I2C / SPI hardware settings (used when USE_MOCK_HARDWARE = False)
 # ---------------------------------------------------------------------------
-# Tested Garud HAT connections from the casat_hat reference:
-#   BNO085 + PCA9685: I2C1 on GPIO2/GPIO3
-#   BMP388: SPI0 on GPIO9/GPIO10/GPIO11 with CE0/GPIO8
+# Tested GARUDA HAT connections:
+#   BNO085 + PCA9685 + INA219: I2C1 on GPIO2/GPIO3
+#   BMP388: SPI0 on GPIO9/GPIO10/GPIO11 with CS=GPIO8
 #   GPS M8N: SC16IS750 UART bridge on SPI0 CE1/GPIO7
 #   XBee3: Pi primary UART on GPIO14/GPIO15
 GPS_TRANSPORT = "SC16IS750_SPI"
@@ -61,6 +89,7 @@ GPS_BAUDRATE = 9600
 XBEE_BAUDRATE = 9600
 XBEE_TX_INTERVAL = TELEMETRY_INTERVAL_SEC
 
+BNO085_TRANSPORT = "I2C"
 BNO085_I2C_ADDRESS = 0x4A
 IMU_ADDRESS = BNO085_I2C_ADDRESS
 BAROMETER_ADDRESS = None
@@ -97,20 +126,24 @@ GPS_SC16IS750_CRYSTAL_HZ = 14_745_600
 GPS_NMEA_TIMEOUT_S = 60
 GPS_PPS_PIN = 17
 
-# Retained aliases for older hardware tests/docs. BNO085 is I2C in the tested
-# HAT code; these SPI pins should not be used by the payload runtime.
+# Retained for SPI bench experiments only. Payload runtime defaults to BNO085
+# on I2C1 (GPIO2/GPIO3) at BNO085_I2C_ADDRESS.
 BNO085_CS_PIN = None
 BNO085_RST_PIN = None
 BNO085_INT_PIN = None
+BNO085_CS = None
+BNO085_RST = None
+BNO085_INT = None
+BNO085_ROTATION_MODE = "ROTATION_VECTOR"  # or "GAME_ROTATION_VECTOR" if supported cleanly
 
-ULN2003_IN1_PIN = 18
-ULN2003_IN2_PIN = 23
-ULN2003_IN3_PIN = 24
-ULN2003_IN4_PIN = 25
-ULN2003_IN1 = _board_pin("D18", ULN2003_IN1_PIN)
-ULN2003_IN2 = _board_pin("D23", ULN2003_IN2_PIN)
-ULN2003_IN3 = _board_pin("D24", ULN2003_IN3_PIN)
-ULN2003_IN4 = _board_pin("D25", ULN2003_IN4_PIN)
+ULN2003_IN1_PIN = 25
+ULN2003_IN2_PIN = 24
+ULN2003_IN3_PIN = 23
+ULN2003_IN4_PIN = 18
+ULN2003_IN1 = _board_pin("D25", ULN2003_IN1_PIN)
+ULN2003_IN2 = _board_pin("D24", ULN2003_IN2_PIN)
+ULN2003_IN3 = _board_pin("D23", ULN2003_IN3_PIN)
+ULN2003_IN4 = _board_pin("D18", ULN2003_IN4_PIN)
 STEPPER_STEP_DELAY = 0.002
 
 LORA_TX_PIN = 14
@@ -153,6 +186,7 @@ GIMBAL_SERVO_CENTER = 90.0
 # The gimbal now damps large swings and keeps the camera roughly nadir-facing.
 # It is not expected to remove all roll/yaw from images.
 GIMBAL_POSE_DAMPING_GAIN = 0.35
+GIMBAL_MAX_COMMAND_STEP_DEG = 8.0
 
 # ---------------------------------------------------------------------------
 # Mapping / camera footprint model

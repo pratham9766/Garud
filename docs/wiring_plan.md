@@ -13,12 +13,13 @@ Raspberry Pi 4 and GARUDA HAT connections for the Ground Mapping Payload.
 
 | Signal | Pi GPIO | Physical Pin | HAT Net |
 |--------|---------|--------------|---------|
-| SDA | GPIO2 | Pin 3 | `SDA_Servo`, `SDA_INA` |
-| SCL | GPIO3 | Pin 5 | `SCL_Servo`, `SCL_INA` |
+| SDA | GPIO2 | Pin 3 | `SDA_BNO`, `SDA_Servo`, `SDA_INA` |
+| SCL | GPIO3 | Pin 5 | `SCL_BNO`, `SCL_Servo`, `SCL_INA` |
 | 3.3 V | - | Pin 1 | Logic power |
 | GND | - | Pin 6 | Common ground |
 
-- PCA9685 servo controller and INA219 current sensor share the I2C bus.
+- BNO085 IMU, PCA9685 servo controller, and INA219 current sensor share the I2C bus.
+- BNO085 default address is `0x4A`.
 - Verify addresses with `i2cdetect -y 1`.
 - Check address jumpers if the PCA9685 and INA219 both appear at `0x40`.
 
@@ -26,17 +27,15 @@ Raspberry Pi 4 and GARUDA HAT connections for the Ground Mapping Payload.
 
 | Signal | Pi GPIO | Physical Pin | HAT Nets |
 |--------|---------|--------------|----------|
-| MOSI | GPIO10 | Pin 19 | `MOSI_BMP`, `MOSI_BNO` |
-| MISO | GPIO9 | Pin 21 | `MISO_BMP`, `MISO_BNO` |
-| SCLK | GPIO11 | Pin 23 | `SCK_BMP`, `SCK_BNO` |
-| BMP388 CS | GPIO22 | Pin 15 | `CS_BMP` |
+| MOSI | GPIO10 | Pin 19 | `MOSI_BMP`, `MOSI_GPS` |
+| MISO | GPIO9 | Pin 21 | `MISO_BMP`, `MISO_GPS` |
+| SCLK | GPIO11 | Pin 23 | `SCK_BMP`, `SCK_GPS` |
+| BMP388 CS | GPIO8 | Pin 24 | `CS_BMP` |
 | BMP388 INT | GPIO17 | Pin 11 | `INT_BMP` |
-| BNO085 CS | GPIO5 | Pin 29 | `CS_BNO` |
-| BNO085 RST | GPIO6 | Pin 31 | `RST_BNO` |
-| BNO085 INT | GPIO27 | Pin 13 | `INT_BNO` |
 
 - Enable SPI in `raspi-config`.
-- The schema labels BNO085 and BMP388 as SPI devices; do not wire them to the old I2C-only sensor plan.
+- BMP388 and the SC16IS750 GPS bridge use SPI. BNO085 remains on I2C1 in the
+  current payload runtime config.
 
 ## Servo Gimbal
 
@@ -51,15 +50,21 @@ Raspberry Pi 4 and GARUDA HAT connections for the Ground Mapping Payload.
 
 Use `hardware_tests/test_servo_real.py` for one channel and `hardware_tests/test_gimbal_real.py` for the 2-axis sweep.
 
+## ULN2003 Stepper
+
+| Function | GPIO | Physical Pin |
+|----------|------|--------------|
+| IN1 | GPIO25 | Pin 22 |
+| IN2 | GPIO24 | Pin 18 |
+| IN3 | GPIO23 | Pin 16 |
+| IN4 | GPIO18 | Pin 12 |
+
 ## LoRa Telemetry
 
 | Signal | Pi GPIO | Physical Pin | HAT Net |
 |--------|---------|--------------|---------|
-| Pi TXD | GPIO14 | Pin 8 | `RX_Lora` |
-| Pi RXD | GPIO15 | Pin 10 | `TX_Lora` |
-| AUX | GPIO25 | Pin 22 | `AUX_Lora` |
-| M0 | GPIO23 | Pin 16 | `M0` |
-| M1 | GPIO24 | Pin 18 | `M1` |
+| Pi TXD | GPIO14 | Pin 8 | telemetry radio RX |
+| Pi RXD | GPIO15 | Pin 10 | telemetry radio TX |
 | 5 V | - | Pin 2/4 rail | LoRa power as designed |
 | GND | - | Ground rail | Common ground |
 
@@ -68,7 +73,8 @@ Disable the Raspberry Pi serial console before using GPIO14/GPIO15 for LoRa.
 ## GPS
 
 - The HAT schema uses the primary UART pins for LoRa telemetry.
-- Keep GPS on USB-UART (`GPS_PORT`, default `/dev/ttyUSB0`) unless you add a separate UART path.
+- Keep GPS on the SC16IS750 UART-over-SPI bridge at SPI0 CE1/GPIO7 unless
+  `GPS_TRANSPORT` is deliberately changed for bench debugging.
 
 ## Camera
 
@@ -88,7 +94,7 @@ Disable the Raspberry Pi serial console before using GPIO14/GPIO15 for LoRa.
 - [ ] Pi powered and booting
 - [ ] HAT 5 V and 3.3 V rails present
 - [ ] I2C devices visible (`i2cdetect -y 1`)
-- [ ] SPI enabled and BNO085/BMP388 chip-select lines connected
+- [ ] SPI enabled and BMP388 CS on GPIO8 plus SC16IS750 CS on GPIO7 connected
 - [ ] LoRa UART data visible after serial console is disabled
 - [ ] Camera preview working
 - [ ] Servos powered from HAT/external 5 V rail, not Pi logic power

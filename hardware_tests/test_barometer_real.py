@@ -5,7 +5,7 @@ Wiring from Schema_Draft_2.pdf:
   SCK_BMP  -> GPIO11 / physical pin 23
   MOSI_BMP -> GPIO10 / physical pin 19
   MISO_BMP -> GPIO9  / physical pin 21
-  CS_BMP   -> GPIO22 / physical pin 15
+  CS_BMP   -> GPIO8  / physical pin 24
   INT_BMP  -> GPIO17 / physical pin 11
 
 Run from project root:
@@ -31,7 +31,7 @@ def main() -> int:
     print(f"SCLK:         GPIO{config.SPI_SCLK_PIN} pin 23")
     print(f"MOSI:         GPIO{config.SPI_MOSI_PIN} pin 19")
     print(f"MISO:         GPIO{config.SPI_MISO_PIN} pin 21")
-    print(f"CS_BMP:       GPIO{config.BMP388_CS_PIN} pin 15")
+    print(f"CS_BMP:       GPIO{config.BMP388_CS_PIN} pin 24")
     print(f"INT_BMP:      GPIO{config.BMP388_INT_PIN} pin 11")
     print()
 
@@ -52,7 +52,7 @@ def main() -> int:
 
     try:
         spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-        cs = digitalio.DigitalInOut(board.D22)
+        cs = digitalio.DigitalInOut(config.BMP388_CS)
         sensor = BMP3XX_SPI(spi, cs)
         sensor.sea_level_pressure = 1013.25
     except Exception as exc:

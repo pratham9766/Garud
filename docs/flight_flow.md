@@ -32,7 +32,7 @@ Mission state machine for the Ground Mapping Payload.
 
 - Primary mapping phase.
 - Camera captures images at `IMAGE_CAPTURE_INTERVAL_SEC`.
-- GPS, IMU, and barometer logged at `SENSOR_LOG_INTERVAL_SEC`.
+- GPS, AHRS/IMU, and barometer logged at `SENSOR_LOG_INTERVAL_SEC`.
 - Gimbal stabilizer active (if enabled).
 - Telemetry sent at `TELEMETRY_INTERVAL_SEC`.
 - Mission clock (`mission_time`) running.

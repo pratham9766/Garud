@@ -15,6 +15,8 @@ from abc import ABC, abstractmethod
 
 import config
 from core.shared_data import SharedData
+from sensor_fusion.ahrs import AHRSManager, raw_from_reading
+from sensor_fusion.quaternion import bno_xyzw_to_wxyz, from_euler_deg, to_euler_deg
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ class MockIMU(BaseIMU):
         self._last_yaw = 0.0
 
     def read(self) -> dict:
+        timestamp_ns = time.monotonic_ns()
         self._t += 0.1
         roll = 5.0 * math.sin(self._t) + random.uniform(-0.5, 0.5)
         pitch = 3.0 * math.cos(self._t * 0.7) + random.uniform(-0.5, 0.5)
@@ -50,13 +53,21 @@ class MockIMU(BaseIMU):
         self._last_roll = roll
         self._last_pitch = pitch
         self._last_yaw = yaw
+        q = from_euler_deg(roll, pitch, yaw)
         return {
+            "timestamp_ns": timestamp_ns,
             "roll": roll,
             "pitch": pitch,
             "yaw": yaw,
             "gyro_x": gyro_x,
             "gyro_y": gyro_y,
             "gyro_z": gyro_z,
+            "gyro_rads": (math.radians(gyro_x), math.radians(gyro_y), math.radians(gyro_z)),
+            "accel_mps2": (0.0, 0.0, 9.80665),
+            "mag_ut": (25.0, 0.0, 35.0),
+            "quaternion": (q[1], q[2], q[3], q[0]),
+            "accuracy_rad": 0.05,
+            "calibration_status": 3,
         }
 
     def close(self) -> None:
@@ -64,59 +75,80 @@ class MockIMU(BaseIMU):
 
 
 class RealIMU(BaseIMU):
-    """BNO085 IMU on Garud HAT I2C1."""
+    """BNO085 IMU on GARUDA HAT I2C1 by default, with SPI bench fallback by config."""
 
     def __init__(self) -> None:
         import bus_manager
         from adafruit_bno08x import (
             BNO_REPORT_ACCELEROMETER,
             BNO_REPORT_GYROSCOPE,
-            BNO_REPORT_ROTATION_VECTOR,
+            BNO_REPORT_MAGNETOMETER,
         )
-        from adafruit_bno08x.i2c import BNO08X_I2C
+        import adafruit_bno08x as bno08x
 
-        self._bno = BNO08X_I2C(
-            bus_manager.get_i2c(),
-            address=config.BNO085_I2C_ADDRESS,
+        rotation_report = getattr(
+            bno08x,
+            "BNO_REPORT_GAME_ROTATION_VECTOR"
+            if config.BNO085_ROTATION_MODE == "GAME_ROTATION_VECTOR"
+            else "BNO_REPORT_ROTATION_VECTOR",
         )
+
+        if str(config.BNO085_TRANSPORT).upper() == "SPI":
+            import digitalio
+            from adafruit_bno08x.spi import BNO08X_SPI
+
+            if config.BNO085_CS is None or config.BNO085_INT is None or config.BNO085_RST is None:
+                raise ValueError("BNO085 SPI transport requires BNO085_CS/INT/RST pins.")
+            self._cs = digitalio.DigitalInOut(config.BNO085_CS)
+            self._int = digitalio.DigitalInOut(config.BNO085_INT)
+            self._reset = digitalio.DigitalInOut(config.BNO085_RST)
+            self._bno = BNO08X_SPI(bus_manager.get_spi(), self._cs, self._int, self._reset)
+            bus_detail = f"SPI CS GPIO{config.BNO085_CS_PIN}"
+        else:
+            from adafruit_bno08x.i2c import BNO08X_I2C
+
+            self._bno = BNO08X_I2C(
+                bus_manager.get_i2c(),
+                address=config.BNO085_I2C_ADDRESS,
+            )
+            bus_detail = f"I2C address 0x{config.BNO085_I2C_ADDRESS:02X}"
+
         self._bno.enable_feature(BNO_REPORT_ACCELEROMETER)
         self._bno.enable_feature(BNO_REPORT_GYROSCOPE)
-        self._bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
-        logger.info(
-            "BNO085 initialized on I2C address 0x%02X.",
-            config.BNO085_I2C_ADDRESS,
-        )
-
-    @staticmethod
-    def _quat_to_euler(i: float, j: float, k: float, real: float) -> tuple[float, float, float]:
-        """Convert BNO085 quaternion (i, j, k, real) to roll/pitch/yaw degrees."""
-        x, y, z, w = i, j, k, real
-        sinr_cosp = 2.0 * (w * x + y * z)
-        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
-        roll = math.degrees(math.atan2(sinr_cosp, cosr_cosp))
-
-        sinp = 2.0 * (w * y - z * x)
-        if abs(sinp) >= 1.0:
-            pitch = math.degrees(math.copysign(math.pi / 2.0, sinp))
-        else:
-            pitch = math.degrees(math.asin(sinp))
-
-        siny_cosp = 2.0 * (w * z + x * y)
-        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-        yaw = math.degrees(math.atan2(siny_cosp, cosy_cosp)) % 360.0
-        return roll, pitch, yaw
+        if config.AHRS_USE_MAGNETOMETER:
+            self._bno.enable_feature(BNO_REPORT_MAGNETOMETER)
+        self._bno.enable_feature(rotation_report)
+        logger.info("BNO085 initialized on %s (%s).", bus_detail, config.BNO085_ROTATION_MODE)
 
     def read(self) -> dict:
+        timestamp_ns = time.monotonic_ns()
+        accel = tuple(float(v) for v in self._bno.acceleration)
         gyro_x, gyro_y, gyro_z = self._bno.gyro
+        mag = None
+        if config.AHRS_USE_MAGNETOMETER:
+            try:
+                mag = tuple(float(v) for v in self._bno.magnetic)
+            except Exception:
+                mag = None
         quat_i, quat_j, quat_k, quat_real = self._bno.quaternion
-        roll, pitch, yaw = self._quat_to_euler(quat_i, quat_j, quat_k, quat_real)
+        q = bno_xyzw_to_wxyz(quat_i, quat_j, quat_k, quat_real)
+        roll, pitch, yaw = to_euler_deg(q) if q else (0.0, 0.0, 0.0)
+        accuracy = getattr(self._bno, "accuracy", None)
+        calibration = getattr(self._bno, "calibration_status", None)
         return {
+            "timestamp_ns": timestamp_ns,
             "roll": roll,
             "pitch": pitch,
             "yaw": yaw,
+            "accel_mps2": accel,
+            "gyro_rads": (gyro_x, gyro_y, gyro_z),
             "gyro_x": math.degrees(gyro_x),
             "gyro_y": math.degrees(gyro_y),
             "gyro_z": math.degrees(gyro_z),
+            "mag_ut": mag,
+            "quaternion": (quat_i, quat_j, quat_k, quat_real),
+            "accuracy_rad": accuracy,
+            "calibration_status": calibration,
         }
 
     def close(self) -> None:
@@ -132,26 +164,39 @@ def create_imu() -> BaseIMU:
 def imu_worker(shared: SharedData, stop_event: threading.Event) -> None:
     """Background thread: poll IMU and update shared data."""
     imu = create_imu()
+    ahrs = AHRSManager()
     logger.info("IMU worker started (mock=%s).", config.USE_MOCK_HARDWARE)
 
     try:
         while not stop_event.is_set():
             try:
                 reading = imu.read()
+                raw = raw_from_reading(reading)
+                attitude = ahrs.update(raw)
+                raw_q = bno_xyzw_to_wxyz(*raw.bno_quaternion_xyzw) if raw.bno_quaternion_xyzw else None
+                raw_accel = raw.accel_mps2 or (0.0, 0.0, 0.0)
+                raw_mag = raw.mag_ut or (0.0, 0.0, 0.0)
+                if raw_q is None:
+                    raw_q = (1.0, 0.0, 0.0, 0.0)
                 shared.update(
-                    roll=reading["roll"],
-                    pitch=reading["pitch"],
-                    yaw=reading["yaw"],
-                    gyro_x=reading.get("gyro_x", 0.0),
-                    gyro_y=reading.get("gyro_y", 0.0),
-                    gyro_z=reading.get("gyro_z", 0.0),
+                    raw_accel_x=raw_accel[0],
+                    raw_accel_y=raw_accel[1],
+                    raw_accel_z=raw_accel[2],
+                    raw_mag_x=raw_mag[0],
+                    raw_mag_y=raw_mag[1],
+                    raw_mag_z=raw_mag[2],
+                    raw_quat_w=raw_q[0],
+                    raw_quat_x=raw_q[1],
+                    raw_quat_y=raw_q[2],
+                    raw_quat_z=raw_q[3],
                     imu_ok=True,
                 )
+                shared.publish_attitude(attitude)
             except Exception as exc:
                 logger.error("IMU read error: %s", exc)
                 shared.update(imu_ok=False, status="IMU_ERROR")
 
-            stop_event.wait(0.1)
+            stop_event.wait(1.0 / config.AHRS_RATE_HZ)
     finally:
         imu.close()
         logger.info("IMU worker stopped.")
