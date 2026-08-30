@@ -1,7 +1,4 @@
-"""Live terminal dashboard for manual GARUDA sensor/AHRS verification.
-
-By default this runs real hardware. Use --mock for desktop checks.
-"""
+"""Live terminal dashboard for manual GARUDA real sensor/AHRS verification."""
 
 from __future__ import annotations
 
@@ -40,7 +37,6 @@ def _print_dashboard(
     *,
     elapsed: float,
     mode: str,
-    mock: bool,
     gps_status: str,
     baro_status: str,
     imu_status: str,
@@ -54,7 +50,7 @@ def _print_dashboard(
     print("\033[2J\033[H", end="")
     print("GARUDA Live Sensor/AHRS Dashboard")
     print("=" * 72)
-    print(f"mode={mode:<9} mock={mock}  runtime={elapsed:7.1f}s  status={snap.status}")
+    print(f"mode={mode:<9} hardware=real  runtime={elapsed:7.1f}s  status={snap.status}")
     print(f"config: BNO085={config.BNO085_TRANSPORT}/0x{config.BNO085_I2C_ADDRESS:02X}  "
           f"BMP388_CS=GPIO{config.BMP388_CS_PIN}  AHRS_RATE={config.AHRS_RATE_HZ}Hz")
     print()
@@ -127,12 +123,11 @@ def _print_dashboard(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=[m.value.lower() for m in AHRSMode], default=config.AHRS_MODE.lower())
-    parser.add_argument("--mock", action="store_true", help="Use mock sensors.")
     parser.add_argument("--rate", type=float, default=2.0, help="Terminal refresh rate in Hz.")
     parser.add_argument("--duration", type=float, default=0.0, help="Optional run duration in seconds; 0 runs until Ctrl+C.")
     args = parser.parse_args()
 
-    config.USE_MOCK_HARDWARE = bool(args.mock)
+    config.USE_MOCK_HARDWARE = False
     mode = args.mode.upper()
     manager = AHRSManager(mode=mode, enabled=mode != "OFF")
     shared = SharedData()
@@ -174,7 +169,6 @@ def main() -> int:
             _print_dashboard(
                 elapsed=time.monotonic() - started,
                 mode=mode,
-                mock=config.USE_MOCK_HARDWARE,
                 gps_status=gps_status,
                 baro_status=baro_status,
                 imu_status=imu_status,

@@ -71,9 +71,9 @@ AHRS_INIT_TIMEOUT_SEC = 2.0
 IMU_TO_BODY_QUATERNION = (1.0, 0.0, 0.0, 0.0)
 
 # ---------------------------------------------------------------------------
-# Simulation mode (default until hardware arrives)
+# Runtime hardware mode
 # ---------------------------------------------------------------------------
-USE_MOCK_HARDWARE = True
+USE_MOCK_HARDWARE = False
 
 # ---------------------------------------------------------------------------
 # Timing intervals (seconds)
@@ -209,6 +209,10 @@ CAMERA_FOCAL_LENGTH_PX = 3100.0
 CAMERA_CENTER_X_PX = CAMERA_SENSOR_WIDTH_PX / 2.0
 CAMERA_CENTER_Y_PX = CAMERA_SENSOR_HEIGHT_PX / 2.0
 CAMERA_DISTORTION_COEFFS = [0.0, 0.0, 0.0, 0.0, 0.0]
+CAMERA_BACKEND = "AUTO"  # AUTO, PICAMERA2, or OPENCV
+CAMERA_DEVICE_INDEX = 0
+CAMERA_FRAME_WIDTH = 1280
+CAMERA_FRAME_HEIGHT = 720
 
 # Altitudes lower than this are ignored for footprint sizing to avoid zero-area
 # polygons when the payload has landed.

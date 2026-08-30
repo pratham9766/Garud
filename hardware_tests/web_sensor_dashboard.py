@@ -1,10 +1,7 @@
-"""Browser dashboard for live GARUDA sensor, AHRS, and camera-frame checks.
+"""Browser dashboard for live GARUDA real sensor, AHRS, and camera-frame checks.
 
 Run on the Raspberry Pi for hardware:
     python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
-
-Run on a desktop with mock sensors:
-    python hardware_tests/web_sensor_dashboard.py --mock
 """
 
 from __future__ import annotations
@@ -125,9 +122,8 @@ setInterval(refresh, 500);
 
 
 class DashboardState:
-    def __init__(self, mode: str, mock: bool, camera_interval: float) -> None:
+    def __init__(self, mode: str, camera_interval: float) -> None:
         self.mode = mode
-        self.mock = mock
         self.camera_interval = camera_interval
         self.started = time.monotonic()
         self.shared = SharedData()
@@ -181,7 +177,7 @@ def _fmt_tuple(values: tuple[float, ...] | None, precision: int = 3) -> list[str
 
 
 def _sensor_loop(state: DashboardState, stop: threading.Event) -> None:
-    config.USE_MOCK_HARDWARE = state.mock
+    config.USE_MOCK_HARDWARE = False
     gps = create_gps()
     baro = create_barometer()
     imu = create_imu()
@@ -240,7 +236,7 @@ def _sensor_loop(state: DashboardState, stop: threading.Event) -> None:
 
 
 def _camera_loop(state: DashboardState, stop: threading.Event) -> None:
-    config.USE_MOCK_HARDWARE = state.mock
+    config.USE_MOCK_HARDWARE = False
     camera = create_camera()
     try:
         while not stop.is_set():
@@ -310,14 +306,14 @@ def _make_handler(state: DashboardState):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=[m.value.lower() for m in AHRSMode], default=config.AHRS_MODE.lower())
-    parser.add_argument("--mock", action="store_true", help="Use mock sensors and generated camera frames.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--camera-interval", type=float, default=1.0)
+    parser.add_argument("--camera-interval", type=float, default=0.5)
     parser.add_argument("--duration", type=float, default=0.0, help="Optional duration for smoke tests; 0 runs until Ctrl+C.")
     args = parser.parse_args()
 
-    state = DashboardState(args.mode.upper(), bool(args.mock), args.camera_interval)
+    config.USE_MOCK_HARDWARE = False
+    state = DashboardState(args.mode.upper(), args.camera_interval)
     stop = threading.Event()
     threads = [
         threading.Thread(target=_sensor_loop, args=(state, stop), name="dashboard-sensors"),
@@ -330,7 +326,7 @@ def main() -> int:
     server.timeout = 0.5
     url_host = "localhost" if args.host in ("0.0.0.0", "127.0.0.1") else args.host
     print(f"GARUDA dashboard running at http://{url_host}:{args.port}")
-    print("Ctrl+C to stop. The dashboard reads sensors and captures frames; it does not move servos.")
+    print("Ctrl+C to stop. The dashboard reads real sensors and captures frames; it does not move servos.")
     deadline = None if args.duration <= 0 else time.monotonic() + args.duration
     try:
         while deadline is None or time.monotonic() < deadline:

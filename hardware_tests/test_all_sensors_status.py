@@ -11,6 +11,7 @@ Run from project root:
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 import shutil
 import sys
 
@@ -82,8 +83,15 @@ def main() -> int:
 
     # --- Config ---
     try:
-        _ = config.GPS_PORT, config.XBEE_PORT, config.BAROMETER_ADDRESS, config.IMU_ADDRESS
-        rows.append(("Config", "import config.py", "PASS", f"GPS={config.GPS_PORT} XBEE={config.XBEE_PORT}"))
+        _ = config.GPS_PORT, config.XBEE_PORT, config.BMP388_CS_PIN, config.BNO085_I2C_ADDRESS
+        rows.append(
+            (
+                "Config",
+                "import config.py",
+                "PASS",
+                f"GPS={config.GPS_PORT} XBEE={config.XBEE_PORT} BNO085=0x{config.BNO085_I2C_ADDRESS:02X}",
+            )
+        )
     except Exception as exc:
         rows.append(("Config", "import config.py", "FAIL", str(exc)))
 
@@ -129,8 +137,9 @@ def main() -> int:
 
     for label, mod in [
         ("GPIO", "gpiozero"),
-        ("Barometer", "adafruit_bmp280"),
-        ("IMU", "adafruit_mpu6050"),
+        ("Barometer", "adafruit_bmp3xx"),
+        ("IMU", "adafruit_bno08x"),
+        ("PCA9685", "adafruit_pca9685"),
     ]:
         status, note = check_import(mod)
         if status == "FAIL":

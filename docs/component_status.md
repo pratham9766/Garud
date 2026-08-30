@@ -6,9 +6,9 @@ Track hardware arrival, assembly, and software integration status.
 |-----------|---------|----------|--------------|------------|-----------------|-------|
 | Raspberry Pi 4 8GB | [ ] | [ ] | [ ] | [ ] | N/A | |
 | microSD card (32 GB+) | [ ] | [ ] | [ ] | [ ] | N/A | High endurance recommended |
-| Pi HQ / Arducam HQ Camera | [ ] | [ ] | [ ] | [ ] | `RealCamera` stub | CSI cable |
-| GPS module | [ ] | [ ] | [ ] | [ ] | `RealGPS` stub | USB-UART because HAT UART is LoRa |
-| BMP388 barometer | [ ] | [ ] | [ ] | [ ] | `RealBarometer` stub | SPI: `CS_BMP` on GPIO8 |
+| Pi HQ / Arducam HQ Camera | [ ] | [ ] | [ ] | [ ] | `RealCamera` Picamera2/OpenCV path | CSI cable or OpenCV camera device |
+| GPS module | [ ] | [ ] | [ ] | [ ] | `RealGPS` SC16IS750 path | GPS bridge on SPI0 CE1/GPIO7 |
+| BMP388 barometer | [ ] | [ ] | [ ] | [ ] | `RealBarometer` BMP388 SPI path | SPI: `CS_BMP` on GPIO8 |
 | BNO085 IMU/AHRS | [ ] | [ ] | [ ] | [ ] | `RealIMU` I2C driver path plus AHRS manager | I2C1: GPIO2/GPIO3, address `0x4A` |
 | PCA9685 servo controller | [ ] | [ ] | [ ] | [ ] | `adafruit_servokit` hardware tests | I2C, `OE_Servo` on GPIO4 |
 | 2-axis servo gimbal | [ ] | [ ] | [ ] | [ ] | `RealGimbal` stub | PCA9685 channels in `config.py` |
@@ -22,10 +22,10 @@ Track hardware arrival, assembly, and software integration status.
 
 | Module | Mock Working | Real Driver | Test Script |
 |--------|--------------|-------------|-------------|
-| GPS | yes | stub | `tests/test_gps.py`, `hardware_tests/test_gps_real.py` |
-| IMU | yes | stub | `tests/test_imu.py` |
-| Barometer | yes | stub | `tests/test_barometer.py` |
-| Camera | yes | stub | `tests/test_camera.py`, `hardware_tests/test_camera_real.py` |
+| GPS | yes | SC16IS750 bridge path | `tests/test_gps.py`, `hardware_tests/test_gps_real.py` |
+| IMU | yes | BNO085 I2C path | `tests/test_imu.py`, `hardware_tests/test_imu_real.py` |
+| Barometer | yes | BMP388 SPI path | `tests/test_barometer.py`, `hardware_tests/test_barometer_real.py` |
+| Camera | yes | Picamera2/OpenCV path | `tests/test_camera.py`, `hardware_tests/test_camera_real.py` |
 | Gimbal | yes | partial PCA9685 hardware test | `hardware_tests/test_gimbal_real.py` |
 | Telemetry | yes | serial stub | `tests/test_telemetry.py`, `hardware_tests/test_xbee_real.py` |
 | CSV Logger | yes | N/A | full simulation |

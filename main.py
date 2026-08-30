@@ -112,7 +112,7 @@ def main() -> None:
 
     logger.info("=" * 60)
     logger.info("Ground Mapping Payload — starting")
-    logger.info("Mock hardware: %s", config.USE_MOCK_HARDWARE)
+    logger.info("Real hardware mode: %s", not config.USE_MOCK_HARDWARE)
     logger.info("=" * 60)
 
     shared = SharedData()

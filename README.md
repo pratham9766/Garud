@@ -5,16 +5,16 @@ mapping payload. The payload runs on a Raspberry Pi 5, collects synchronized
 GPS, barometer, AHRS/IMU, camera, gimbal, and telemetry data during descent, logs the
 mission to CSV, and processes recovered mission data after flight.
 
-The project currently defaults to simulation mode, so it can be developed and
-tested without connected flight hardware.
+The project now defaults to real hardware mode for Raspberry Pi payload tests.
+Simulation helpers remain for CI and desktop development, but operator bring-up
+commands read the connected sensors directly.
 
 ## Project Status
 
-The simulation path is the primary working flow. It can generate a fake descent,
-capture mock images, log telemetry, and export map products without hardware.
 Real hardware adapters are wired for the tested Garud HAT reference
-configuration. Run the hardware checks on the Raspberry Pi before mission use,
-because desktop development still defaults to mock hardware.
+configuration. Run the hardware checks and live dashboards on the Raspberry Pi
+before mission use so BNO085, BMP388, GPS, camera, telemetry, and gimbal status
+are visible with live readings.
 
 Post-flight terrain reconstruction has a tested V2 path for external aerial
 datasets such as the Wietrznia OpenDroneMap DJI image set. The V2 path now
@@ -26,10 +26,8 @@ and true terrain orthorectification were skipped honestly.
 
 ## Features
 
-- Simulated GPS track near Pune, India.
-- Simulated descent from roughly 700 m altitude.
-- Mock camera image capture with GPS text overlays.
-- Mock IMU/AHRS, barometer, gimbal, and telemetry workers.
+- Real BNO085, BMP388, GPS, camera, telemetry, and PCA9685 gimbal hardware paths.
+- Terminal and browser dashboards for manual live sensor verification.
 - Threaded mission runtime with shared payload state.
 - CSV mission logging with image timestamps, angular velocity, raw IMU, and AHRS metadata.
 - AHRS-assisted pose priors for post-flight image normalization.
@@ -88,7 +86,7 @@ missing CUDA.
 
 ```text
 ground_mapping_payload/
-|-- camera/             Camera factory and mock/real camera classes
+|-- camera/             Camera factory and camera implementations
 |-- core/               Shared state, mission states, thread manager, health
 |-- data/               Runtime output folders for logs, images, and maps
 |-- docs/               Wiring, pin map, checklist, and user manual
@@ -207,7 +205,7 @@ python hardware_tests/test_all_sensors_status.py
 
 | Path | Description |
 | --- | --- |
-| `data/images/` | Captured mock or real images |
+| `data/images/` | Captured payload images |
 | `data/logs/` | Mission CSV logs |
 | `data/maps/flight_path.html` | Interactive flight-path map |
 | `data/maps/flight_path.kml` | Google Earth KML export |
@@ -280,16 +278,18 @@ timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,
 
 ## Configuration
 
-Edit `config.py` to enable/disable modules, switch between mock and real
-hardware, adjust capture/logging intervals, and set Garud HAT bus/pin values.
+Edit `config.py` to enable/disable modules, adjust capture/logging intervals,
+and set Garud HAT bus/pin values.
 
 Important settings:
 
 ```python
-USE_MOCK_HARDWARE = True
+USE_MOCK_HARDWARE = False
 ENABLE_CAMERA = True
 ENABLE_GPS = True
 ENABLE_MAPPING = True
+CAMERA_BACKEND = "AUTO"
+CAMERA_DEVICE_INDEX = 0
 GPS_TRANSPORT = "SC16IS750_SPI"
 XBEE_SERIAL_PORT = "/dev/ttyAMA0"
 BNO085_TRANSPORT = "I2C"
@@ -306,8 +306,7 @@ AHRS_MODE = "BNO085"
 AHRS_RATE_HZ = 100
 ```
 
-Set `USE_MOCK_HARDWARE = False` on the Raspberry Pi after installing
-`requirements.txt` and confirming the HAT wiring.
+Keep `USE_MOCK_HARDWARE = False` on the Raspberry Pi for real sensor testing.
 
 Mapping footprint settings:
 
@@ -336,7 +335,7 @@ MAPPING_COVERAGE_GRID_M = 5.0
 | `sensors/gps.py` | `RealGPS` using NEO-M8N through SC16IS750 on SPI0 CE1 |
 | `sensors/imu.py` | `RealIMU` using BNO085 on I2C1 address `0x4A` |
 | `sensors/barometer.py` | `RealBarometer` using BMP388 on SPI0 with `CS_BMP` GPIO8 |
-| `camera/mock_camera.py` | Real Raspberry Pi camera capture |
+| `camera/mock_camera.py` | `RealCamera` via Picamera2 or OpenCV |
 | `telemetry/xbee_sender.py` | `RealTelemetry` using XBee on `/dev/ttyAMA0` |
 | `gimbal/servo_control.py` | `RealGimbal` using PCA9685 servo control |
 
@@ -346,8 +345,8 @@ For visual manual bring-up, run:
 python hardware_tests/live_sensor_dashboard.py --mode bno085
 ```
 
-Use `--mock` for desktop checks and `--duration <seconds>` for a timed run.
-The dashboard shows GPS, barometer, raw BNO085 readings, native quaternion,
+Use `--duration <seconds>` for a timed run. The dashboard shows GPS,
+barometer, raw BNO085 readings, native quaternion,
 calculated Euler angles, AHRS source/health, quaternion `(w,x,y,z)`, correction
 flags, diagnostics counters, and a telemetry packet preview. It reads sensors
 only and does not move servos.
@@ -359,11 +358,11 @@ python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 ```
 
 Open `http://<raspberry-pi-ip>:8080`. The page refreshes live readings and the
-latest captured frame. Use `--mock` on a desktop.
+latest captured camera frame.
 
 The mapping, logging, telemetry, and post-flight processing pipelines are kept
-independent of the hardware adapters. Mock mode remains the default for local
-development and CI-style checks.
+independent of the hardware adapters. Mock classes remain only for local
+development tests and CI-style checks.
 
 ## License
 

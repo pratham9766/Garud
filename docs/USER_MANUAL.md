@@ -60,21 +60,19 @@ pip install -r requirements.txt
 
 All main runtime settings are in `config.py`.
 
-For simulation:
-
-```python
-USE_MOCK_HARDWARE = True
-```
-
 For hardware mode:
 
 ```python
 USE_MOCK_HARDWARE = False
-GPS_PORT = "/dev/ttyUSB0"
-XBEE_PORT = "/dev/ttyUSB1"
+GPS_TRANSPORT = "SC16IS750_SPI"
+GPS_PORT = "SC16IS750@SPI0.CE1"
+XBEE_PORT = "/dev/ttyAMA0"
 GPS_BAUDRATE = 9600
 XBEE_BAUDRATE = 9600
-BAROMETER_ADDRESS = 0x76
+BNO085_TRANSPORT = "I2C"
+BNO085_I2C_ADDRESS = 0x4A
+BMP388_CS_PIN = 8
+CAMERA_BACKEND = "AUTO"
 SERVO_CONTROLLER_ADDRESS = 0x40
 ```
 
@@ -126,7 +124,8 @@ Tune field-of-view values after the final camera and lens are selected.
 
 ## 4. Simulation Workflow
 
-Use simulation mode before connecting hardware.
+Simulation tests are retained for desktop development and CI. The payload
+runtime and hardware dashboards default to real sensors.
 
 Run a fake mapping test:
 
@@ -149,8 +148,8 @@ python tests/test_full_simulation.py
 
 Expected result:
 
-- Mock sensors update shared state.
-- Mock images are saved under `data/images/`.
+- Simulated sensors update shared state.
+- Generated images are saved under `data/images/`.
 - Telemetry packets print to console.
 - Mission data is logged to CSV.
 - HTML and KML maps are generated.
@@ -218,8 +217,9 @@ Recommended order:
 8. Test servos.
 9. Test gimbal.
 10. Test LoRa telemetry.
-11. Run full integrated simulation.
-12. Run a short real-hardware field walk.
+11. Run the live terminal dashboard and visually check the readings.
+12. Run the browser dashboard and visually check the camera frame.
+13. Run a short real-hardware field walk.
 
 Commands:
 
@@ -244,7 +244,7 @@ Install optional packages on the Pi when real hardware is connected:
 
 ```bash
 sudo apt install -y i2c-tools python3-picamera2 python3-gpiozero pigpio
-pip install adafruit-circuitpython-bmp280 adafruit-circuitpython-mpu6050 adafruit-blinka smbus2
+pip install -r requirements.txt
 ```
 
 Enable interfaces with `raspi-config`:
@@ -265,7 +265,7 @@ Enable interfaces with `raspi-config`:
 - Gimbal moves without binding.
 - Telemetry packets received on ground station.
 - `config.py` ports and addresses match connected hardware.
-- `USE_MOCK_HARDWARE` is set correctly.
+- `USE_MOCK_HARDWARE = False`.
 - A short field walk produces a usable map.
 
 ## 10. Troubleshooting
@@ -278,9 +278,8 @@ No map generated:
 
 GPS values are zero:
 
-- In simulation, confirm `USE_MOCK_HARDWARE = True`.
-- In hardware mode, confirm GPS serial port and baud rate.
-- Check whether the GPS has a valid fix.
+- Confirm GPS transport, chip-select wiring, and baud rate.
+- Check whether the GPS has a valid outdoor fix.
 
 Camera errors:
 
@@ -298,7 +297,7 @@ No telemetry:
 
 - Keep generated data out of Git.
 - Add new hardware drivers behind existing factory functions.
-- Test in mock mode before switching to real hardware.
+- Use simulation tests for desktop-only changes; use hardware dashboards before flight.
 - Keep CSV column names stable because mapping and telemetry depend on them.
 - Treat AHRS attitude as a prior. Visual geometry checks may reject bad pose
   assumptions after flight.
@@ -324,8 +323,8 @@ For visual hardware bring-up:
 python hardware_tests/live_sensor_dashboard.py --mode bno085
 ```
 
-Use `--mock` for a desktop smoke test. The dashboard displays GPS, barometer,
-raw BNO085 values, calculated roll/pitch/yaw, AHRS quaternion, source, health,
+The dashboard displays GPS, barometer, raw BNO085 values, calculated
+roll/pitch/yaw, AHRS quaternion, source, health,
 sample age, correction flags, diagnostics counters, and a compact telemetry
 packet preview. It reads sensors only and does not command the gimbal.
 
@@ -337,7 +336,7 @@ python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 
 Open `http://<raspberry-pi-ip>:8080` from a laptop or the Pi browser. The page
 shows live GPS, barometer, raw IMU, AHRS, telemetry preview, and latest captured
-camera frame. Use `--mock` for desktop testing.
+camera frame.
 
 ## 12. Mapping Algorithm
 
