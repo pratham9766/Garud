@@ -43,7 +43,7 @@ and true terrain orthorectification were skipped honestly.
 - Interactive Folium HTML map export.
 - Google Earth compatible KML export.
 - Estimated camera ground footprints and unique coverage area.
-- Garud HAT hardware adapters for BNO085 on I2C1, BMP388 on SPI0, GPS-over-SC16IS750, XBee, and PCA9685 gimbal control.
+- Garud HAT hardware adapters for BNO085 on I2C1, BMP388 on SPI0 CS GPIO8, GPS-over-SC16IS750, XBee, and PCA9685 gimbal control.
 - Standalone hardware bring-up scripts for Raspberry Pi testing.
 
 ## Tech Stack
@@ -195,6 +195,8 @@ python hardware_tests/test_gps_real.py
 python hardware_tests/test_barometer_real.py
 python hardware_tests/test_imu_real.py
 python hardware_tests/test_ahrs_real.py --mode bno085
+python hardware_tests/live_sensor_dashboard.py --mode bno085
+python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 python hardware_tests/test_servo_real.py
 python hardware_tests/test_gimbal_real.py
 python hardware_tests/test_xbee_real.py
@@ -337,6 +339,27 @@ MAPPING_COVERAGE_GRID_M = 5.0
 | `camera/mock_camera.py` | Real Raspberry Pi camera capture |
 | `telemetry/xbee_sender.py` | `RealTelemetry` using XBee on `/dev/ttyAMA0` |
 | `gimbal/servo_control.py` | `RealGimbal` using PCA9685 servo control |
+
+For visual manual bring-up, run:
+
+```bash
+python hardware_tests/live_sensor_dashboard.py --mode bno085
+```
+
+Use `--mock` for desktop checks and `--duration <seconds>` for a timed run.
+The dashboard shows GPS, barometer, raw BNO085 readings, native quaternion,
+calculated Euler angles, AHRS source/health, quaternion `(w,x,y,z)`, correction
+flags, diagnostics counters, and a telemetry packet preview. It reads sensors
+only and does not move servos.
+
+For a browser display with the latest camera frame:
+
+```bash
+python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
+```
+
+Open `http://<raspberry-pi-ip>:8080`. The page refreshes live readings and the
+latest captured frame. Use `--mock` on a desktop.
 
 The mapping, logging, telemetry, and post-flight processing pipelines are kept
 independent of the hardware adapters. Mock mode remains the default for local

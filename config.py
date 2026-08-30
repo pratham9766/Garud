@@ -1,8 +1,17 @@
 """
-Configuration for the Ground Mapping Payload.
+Central pin, bus, sensor, and runtime configuration for the GARUDA payload.
 
-Toggle hardware modules ON/OFF here. Set USE_MOCK_HARDWARE = False when real
-sensors and actuators are connected on the Raspberry Pi.
+Pin mapping follows the working Garud HAT setup:
+
+    BNO085 (IMU)         - I2C1 : SDA=GPIO2, SCL=GPIO3
+    PCA9685 (Servo drv)  - I2C1 : SDA=GPIO2, SCL=GPIO3, OE=GPIO4
+    BMP388 (Baro)        - SPI0 : MISO=GPIO9, MOSI=GPIO10, SCK=GPIO11, CS=GPIO8
+    SC16IS750 GPS bridge - SPI0 : shared SPI0, CS=GPIO7
+    ULN2003 (Stepper)    - GPIO : IN1=GPIO25, IN2=GPIO24, IN3=GPIO23, IN4=GPIO18
+    Buzzer               - GPIO16
+
+Only edit values here; runtime modules import this file so the project stays
+in sync with the tested sensor setup.
 """
 
 from pathlib import Path

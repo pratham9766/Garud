@@ -52,26 +52,21 @@ class MockBarometer(BaseBarometer):
 
 
 class RealBarometer(BaseBarometer):
-    """BMP388 barometer on Garud HAT SPI0 CE0."""
+    """BMP388 barometer on Garud HAT SPI0 CS GPIO8."""
 
     def __init__(self) -> None:
         import bus_manager
-        import digitalio
-        from adafruit_bmp3xx import BMP3XX_SPI
+        from sensors.bmp388_sensor import BMP388Sensor
 
-        cs = digitalio.DigitalInOut(config.BMP388_CS)
-        self._bmp = BMP3XX_SPI(bus_manager.get_spi(), cs)
-        self._bmp.sea_level_pressure = 1013.25
-        self._bmp.pressure_oversampling = 8
-        self._bmp.temperature_oversampling = 2
-        self._bmp.filter_coefficient = 2
-        logger.info("BMP388 initialized on SPI0 CE0/GPIO%d.", config.BMP388_CS_PIN)
+        self._sensor = BMP388Sensor(bus_manager.get_spi())
+        logger.info("BMP388 initialized on SPI0 CS/GPIO%d.", config.BMP388_CS_PIN)
 
     def read(self) -> dict:
+        reading = self._sensor.read()
         return {
-            "altitude": self._bmp.altitude,
-            "pressure": self._bmp.pressure,
-            "temperature": self._bmp.temperature,
+            "altitude": reading["altitude_m"],
+            "pressure": reading["pressure_hpa"],
+            "temperature": reading["temperature_c"],
         }
 
     def close(self) -> None:

@@ -19,6 +19,8 @@ Pre-flight and bring-up checklist for the Ground Mapping Payload.
 - [ ] **SPI sensor wiring** - BMP388 and SC16IS750 chip-select lines match `docs/pin_map.md`
 - [ ] **IMU test** - BNO085 readings respond to motion; `python hardware_tests/test_imu_real.py`
 - [ ] **AHRS test** - source, quaternion, attitude health, and sample age update; `python hardware_tests/test_ahrs_real.py --mode bno085`
+- [ ] **Live dashboard** - all sensor readings and AHRS state visible; `python hardware_tests/live_sensor_dashboard.py --mode bno085`
+- [ ] **Browser dashboard** - readings plus camera frame visible; `python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0`
 - [ ] **Barometer test** - BMP388 altitude reading plausible after real driver is added
 - [ ] **Servo test** - PCA9685 sweep without load; `python hardware_tests/test_servo_real.py`
 - [ ] **Gimbal test** - 2-axis PCA9685 sweep; `python hardware_tests/test_gimbal_real.py`

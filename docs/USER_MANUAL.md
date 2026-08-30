@@ -230,6 +230,8 @@ python hardware_tests/test_gps_real.py
 python hardware_tests/test_barometer_real.py
 python hardware_tests/test_imu_real.py
 python hardware_tests/test_ahrs_real.py --mode bno085
+python hardware_tests/live_sensor_dashboard.py --mode bno085
+python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 python hardware_tests/test_servo_real.py
 python hardware_tests/test_gimbal_real.py
 python hardware_tests/test_xbee_real.py
@@ -313,6 +315,29 @@ No telemetry:
 - Euler convention: degrees, `R = Rz(yaw) * Ry(pitch) * Rx(roll)`.
 - Gyro units: raw software filters use rad/s; shared/logged gyro fields are
   deg/s.
+
+## 14. Live Sensor Dashboard
+
+For visual hardware bring-up:
+
+```bash
+python hardware_tests/live_sensor_dashboard.py --mode bno085
+```
+
+Use `--mock` for a desktop smoke test. The dashboard displays GPS, barometer,
+raw BNO085 values, calculated roll/pitch/yaw, AHRS quaternion, source, health,
+sample age, correction flags, diagnostics counters, and a compact telemetry
+packet preview. It reads sensors only and does not command the gimbal.
+
+For a browser dashboard with the latest camera frame:
+
+```bash
+python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
+```
+
+Open `http://<raspberry-pi-ip>:8080` from a laptop or the Pi browser. The page
+shows live GPS, barometer, raw IMU, AHRS, telemetry preview, and latest captured
+camera frame. Use `--mock` for desktop testing.
 
 ## 12. Mapping Algorithm
 

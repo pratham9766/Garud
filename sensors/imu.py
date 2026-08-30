@@ -78,77 +78,87 @@ class RealIMU(BaseIMU):
     """BNO085 IMU on GARUDA HAT I2C1 by default, with SPI bench fallback by config."""
 
     def __init__(self) -> None:
-        import bus_manager
-        from adafruit_bno08x import (
-            BNO_REPORT_ACCELEROMETER,
-            BNO_REPORT_GYROSCOPE,
-            BNO_REPORT_MAGNETOMETER,
-        )
-        import adafruit_bno08x as bno08x
-
-        rotation_report = getattr(
-            bno08x,
-            "BNO_REPORT_GAME_ROTATION_VECTOR"
-            if config.BNO085_ROTATION_MODE == "GAME_ROTATION_VECTOR"
-            else "BNO_REPORT_ROTATION_VECTOR",
-        )
-
         if str(config.BNO085_TRANSPORT).upper() == "SPI":
+            import bus_manager
             import digitalio
+            from adafruit_bno08x import (
+                BNO_REPORT_ACCELEROMETER,
+                BNO_REPORT_GYROSCOPE,
+                BNO_REPORT_LINEAR_ACCELERATION,
+                BNO_REPORT_MAGNETOMETER,
+            )
+            import adafruit_bno08x as bno08x
             from adafruit_bno08x.spi import BNO08X_SPI
 
             if config.BNO085_CS is None or config.BNO085_INT is None or config.BNO085_RST is None:
                 raise ValueError("BNO085 SPI transport requires BNO085_CS/INT/RST pins.")
+            rotation_report = getattr(
+                bno08x,
+                "BNO_REPORT_GAME_ROTATION_VECTOR"
+                if config.BNO085_ROTATION_MODE == "GAME_ROTATION_VECTOR"
+                else "BNO_REPORT_ROTATION_VECTOR",
+            )
             self._cs = digitalio.DigitalInOut(config.BNO085_CS)
             self._int = digitalio.DigitalInOut(config.BNO085_INT)
             self._reset = digitalio.DigitalInOut(config.BNO085_RST)
             self._bno = BNO08X_SPI(bus_manager.get_spi(), self._cs, self._int, self._reset)
+            self._sensor = None
+            self._bno.enable_feature(BNO_REPORT_ACCELEROMETER)
+            self._bno.enable_feature(BNO_REPORT_GYROSCOPE)
+            if config.AHRS_USE_MAGNETOMETER:
+                self._bno.enable_feature(BNO_REPORT_MAGNETOMETER)
+            self._bno.enable_feature(BNO_REPORT_LINEAR_ACCELERATION)
+            self._bno.enable_feature(rotation_report)
             bus_detail = f"SPI CS GPIO{config.BNO085_CS_PIN}"
         else:
-            from adafruit_bno08x.i2c import BNO08X_I2C
+            import bus_manager
+            from sensors.bno085_sensor import BNO085Sensor
 
-            self._bno = BNO08X_I2C(
+            self._sensor = BNO085Sensor(
                 bus_manager.get_i2c(),
                 address=config.BNO085_I2C_ADDRESS,
             )
+            self._bno = self._sensor.bno
             bus_detail = f"I2C address 0x{config.BNO085_I2C_ADDRESS:02X}"
-
-        self._bno.enable_feature(BNO_REPORT_ACCELEROMETER)
-        self._bno.enable_feature(BNO_REPORT_GYROSCOPE)
-        if config.AHRS_USE_MAGNETOMETER:
-            self._bno.enable_feature(BNO_REPORT_MAGNETOMETER)
-        self._bno.enable_feature(rotation_report)
         logger.info("BNO085 initialized on %s (%s).", bus_detail, config.BNO085_ROTATION_MODE)
 
     def read(self) -> dict:
-        timestamp_ns = time.monotonic_ns()
-        accel = tuple(float(v) for v in self._bno.acceleration)
-        gyro_x, gyro_y, gyro_z = self._bno.gyro
-        mag = None
-        if config.AHRS_USE_MAGNETOMETER:
-            try:
-                mag = tuple(float(v) for v in self._bno.magnetic)
-            except Exception:
-                mag = None
-        quat_i, quat_j, quat_k, quat_real = self._bno.quaternion
+        if self._sensor is not None:
+            data = self._sensor.read()
+        else:
+            timestamp_ns = time.monotonic_ns()
+            accel = tuple(float(v) for v in self._bno.acceleration)
+            gyro = tuple(float(v) for v in self._bno.gyro)
+            mag = None
+            if config.AHRS_USE_MAGNETOMETER:
+                try:
+                    mag = tuple(float(v) for v in self._bno.magnetic)
+                except Exception:
+                    mag = None
+            lin = tuple(float(v) for v in self._bno.linear_acceleration)
+            quat_i, quat_j, quat_k, quat_real = self._bno.quaternion
+            data = {
+                "timestamp_ns": timestamp_ns,
+                "accel_mps2": accel,
+                "gyro_rads": gyro,
+                "mag_ut": mag,
+                "linear_accel_mps2": lin,
+                "quaternion": (quat_i, quat_j, quat_k, quat_real),
+                "accuracy_rad": getattr(self._bno, "accuracy", None),
+                "calibration_status": getattr(self._bno, "calibration_status", None),
+            }
+        quat_i, quat_j, quat_k, quat_real = data["quaternion"]
         q = bno_xyzw_to_wxyz(quat_i, quat_j, quat_k, quat_real)
         roll, pitch, yaw = to_euler_deg(q) if q else (0.0, 0.0, 0.0)
-        accuracy = getattr(self._bno, "accuracy", None)
-        calibration = getattr(self._bno, "calibration_status", None)
+        gyro_x, gyro_y, gyro_z = data["gyro_rads"]
         return {
-            "timestamp_ns": timestamp_ns,
+            **data,
             "roll": roll,
             "pitch": pitch,
             "yaw": yaw,
-            "accel_mps2": accel,
-            "gyro_rads": (gyro_x, gyro_y, gyro_z),
             "gyro_x": math.degrees(gyro_x),
             "gyro_y": math.degrees(gyro_y),
             "gyro_z": math.degrees(gyro_z),
-            "mag_ut": mag,
-            "quaternion": (quat_i, quat_j, quat_k, quat_real),
-            "accuracy_rad": accuracy,
-            "calibration_status": calibration,
         }
 
     def close(self) -> None:
