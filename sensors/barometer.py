@@ -81,7 +81,12 @@ def create_barometer() -> BaseBarometer:
 
 def barometer_worker(shared: SharedData, stop_event: threading.Event) -> None:
     """Background thread: poll barometer and update shared data."""
-    baro = create_barometer()
+    try:
+        baro = create_barometer()
+    except Exception as exc:
+        logger.error("Barometer init error: %s", exc)
+        shared.update(barometer_ok=False, status="BARO_INIT_ERROR")
+        return
     logger.info("Barometer worker started (mock=%s).", config.USE_MOCK_HARDWARE)
 
     try:

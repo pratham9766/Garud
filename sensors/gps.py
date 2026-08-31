@@ -113,7 +113,12 @@ def gps_worker(shared: SharedData, stop_event: threading.Event) -> None:
         shared: Shared data store.
         stop_event: Shutdown signal.
     """
-    gps = create_gps()
+    try:
+        gps = create_gps()
+    except Exception as exc:
+        logger.error("GPS init error: %s", exc)
+        shared.update(gps_ok=False, status="GPS_INIT_ERROR")
+        return
     logger.info("GPS worker started (mock=%s).", config.USE_MOCK_HARDWARE)
 
     try:

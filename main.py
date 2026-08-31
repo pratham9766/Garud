@@ -106,6 +106,37 @@ def generate_outputs(log_path: Path) -> None:
         logger.error("Map generation failed: %s", exc)
 
 
+def log_terminal_snapshot(shared: SharedData) -> None:
+    """Print a compact live verification line for bench setup."""
+    snap = shared.get_snapshot()
+    logger.info(
+        "VERIFY state=%s t=%.1fs baro=%.2fm imu=%s rpy=(%.2f, %.2f, %.2f) "
+        "ahrs=%s/%s ahrs_rpy=(%.2f, %.2f, %.2f) gyro=(%.2f, %.2f, %.2f) "
+        "accel=(%.2f, %.2f, %.2f) mag=(%.2f, %.2f, %.2f)",
+        snap.state,
+        snap.mission_time,
+        snap.baro_altitude,
+        "OK" if snap.imu_ok else "BAD",
+        snap.roll,
+        snap.pitch,
+        snap.yaw,
+        snap.ahrs_source,
+        snap.ahrs_confidence,
+        snap.ahrs_roll,
+        snap.ahrs_pitch,
+        snap.ahrs_yaw,
+        snap.gyro_x,
+        snap.gyro_y,
+        snap.gyro_z,
+        snap.raw_accel_x,
+        snap.raw_accel_y,
+        snap.raw_accel_z,
+        snap.raw_mag_x,
+        snap.raw_mag_y,
+        snap.raw_mag_z,
+    )
+
+
 def main() -> None:
     setup_logging()
     ensure_directories()
@@ -181,12 +212,22 @@ def main() -> None:
             return global_stop
 
     try:
-        run_mission_state_machine(shared, _StopProxy())
+        if config.PAUSE_STATE_TRANSITIONS:
+            shared.update(state=MissionState.IDLE.value, status="SETUP_TEST")
+            shared.start_mission_clock()
+            logger.info(
+                "Mission state transitions paused for setup verification. "
+                "Press Ctrl+C to stop."
+            )
+        else:
+            run_mission_state_machine(shared, _StopProxy())
 
         # If not interrupted, keep running until LANDED or user stops
         while not global_stop:
             snap = shared.get_snapshot()
-            if snap.state == MissionState.LANDED.value:
+            if config.PAUSE_STATE_TRANSITIONS:
+                log_terminal_snapshot(shared)
+            elif snap.state == MissionState.LANDED.value:
                 logger.info("Mission complete — press Ctrl+C to exit and generate maps.")
             time.sleep(1.0)
 

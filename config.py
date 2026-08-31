@@ -31,16 +31,17 @@ def _board_pin(name: str, bcm: int):
 # ---------------------------------------------------------------------------
 # Module enable flags
 # ---------------------------------------------------------------------------
-ENABLE_CAMERA = True
-ENABLE_GPS = True
+ENABLE_CAMERA = False
+ENABLE_GPS = False
 ENABLE_IMU = True
 ENABLE_BAROMETER = True
 ENABLE_GIMBAL = True
-ENABLE_TELEMETRY = True
+ENABLE_TELEMETRY = False
 ENABLE_MAPPING = True
 ENABLE_LOGGING = True
 ENABLE_STEERING = False  # Future: parachute/glider steering
 ENABLE_POST_FLIGHT_PROCESSING = True
+PAUSE_STATE_TRANSITIONS = True
 
 # ---------------------------------------------------------------------------
 # AHRS attitude estimation

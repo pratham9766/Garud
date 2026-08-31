@@ -173,7 +173,12 @@ def create_imu() -> BaseIMU:
 
 def imu_worker(shared: SharedData, stop_event: threading.Event) -> None:
     """Background thread: poll IMU and update shared data."""
-    imu = create_imu()
+    try:
+        imu = create_imu()
+    except Exception as exc:
+        logger.error("IMU init error: %s", exc)
+        shared.update(imu_ok=False, status="IMU_INIT_ERROR")
+        return
     ahrs = AHRSManager()
     logger.info("IMU worker started (mock=%s).", config.USE_MOCK_HARDWARE)
 

@@ -28,7 +28,12 @@ def camera_worker(shared: SharedData, stop_event: threading.Event) -> None:
 
     Updates shared.image_name and shared.camera_ok on each capture.
     """
-    camera = create_camera()
+    try:
+        camera = create_camera()
+    except Exception as exc:
+        logger.error("Camera init error: %s", exc)
+        shared.update(camera_ok=False, status="CAMERA_INIT_ERROR")
+        return
     logger.info("Camera worker started (mock=%s).", config.USE_MOCK_HARDWARE)
 
     try:

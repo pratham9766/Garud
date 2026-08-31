@@ -20,7 +20,12 @@ def gimbal_worker(shared: SharedData, stop_event: threading.Event) -> None:
 
     Simple proportional correction: command partial opposite of roll/pitch.
     """
-    gimbal = create_gimbal()
+    try:
+        gimbal = create_gimbal()
+    except Exception as exc:
+        logger.error("Gimbal init error: %s", exc)
+        shared.update(status="GIMBAL_INIT_ERROR")
+        return
     logger.info("Gimbal stabilizer started (mock=%s).", config.USE_MOCK_HARDWARE)
     last_pitch = 0.0
     last_roll = 0.0

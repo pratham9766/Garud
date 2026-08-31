@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 
+import config
 from core.shared_data import SharedData
 
 logger = logging.getLogger(__name__)
@@ -30,15 +31,15 @@ def health_monitor_loop(
     while not stop_event.is_set():
         snap = shared.get_snapshot()
         issues = []
-        if not snap.gps_ok:
+        if config.ENABLE_GPS and not snap.gps_ok:
             issues.append("GPS")
-        if not snap.imu_ok:
+        if config.ENABLE_IMU and not snap.imu_ok:
             issues.append("IMU")
-        if not snap.barometer_ok:
+        if config.ENABLE_BAROMETER and not snap.barometer_ok:
             issues.append("Barometer")
-        if not snap.camera_ok:
+        if config.ENABLE_CAMERA and not snap.camera_ok:
             issues.append("Camera")
-        if not snap.telemetry_ok:
+        if config.ENABLE_TELEMETRY and not snap.telemetry_ok:
             issues.append("Telemetry")
 
         if issues:
