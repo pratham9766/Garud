@@ -17,6 +17,7 @@ import config
 from core.shared_data import SharedData
 from sensor_fusion.ahrs import AHRSManager, raw_from_reading
 from sensor_fusion.quaternion import bno_xyzw_to_wxyz, from_euler_deg, to_euler_deg
+from sensors.calibration import apply_imu_calibration, load_calibration
 
 logger = logging.getLogger(__name__)
 
@@ -180,20 +181,30 @@ def imu_worker(shared: SharedData, stop_event: threading.Event) -> None:
         shared.update(imu_ok=False, status="IMU_INIT_ERROR")
         return
     ahrs = AHRSManager()
+    calibration = load_calibration()
     logger.info("IMU worker started (mock=%s).", config.USE_MOCK_HARDWARE)
 
     try:
         while not stop_event.is_set():
             try:
-                reading = imu.read()
+                reading = apply_imu_calibration(imu.read(), calibration)
                 raw = raw_from_reading(reading)
                 attitude = ahrs.update(raw)
                 raw_q = bno_xyzw_to_wxyz(*raw.bno_quaternion_xyzw) if raw.bno_quaternion_xyzw else None
                 raw_accel = raw.accel_mps2 or (0.0, 0.0, 0.0)
+                raw_gyro = raw.gyro_rads or (0.0, 0.0, 0.0)
                 raw_mag = raw.mag_ut or (0.0, 0.0, 0.0)
                 if raw_q is None:
                     raw_q = (1.0, 0.0, 0.0, 0.0)
+                raw_accuracy = 0.0 if raw.bno_accuracy_rad is None else float(raw.bno_accuracy_rad)
+                try:
+                    raw_calibration_status = int(raw.calibration_status)
+                except (TypeError, ValueError):
+                    raw_calibration_status = -1
                 shared.update(
+                    raw_gyro_x=raw_gyro[0],
+                    raw_gyro_y=raw_gyro[1],
+                    raw_gyro_z=raw_gyro[2],
                     raw_accel_x=raw_accel[0],
                     raw_accel_y=raw_accel[1],
                     raw_accel_z=raw_accel[2],
@@ -204,6 +215,9 @@ def imu_worker(shared: SharedData, stop_event: threading.Event) -> None:
                     raw_quat_x=raw_q[1],
                     raw_quat_y=raw_q[2],
                     raw_quat_z=raw_q[3],
+                    raw_imu_timestamp_ns=raw.timestamp_ns,
+                    raw_imu_accuracy_rad=raw_accuracy,
+                    raw_imu_calibration_status=raw_calibration_status,
                     imu_ok=True,
                 )
                 shared.publish_attitude(attitude)

@@ -132,6 +132,7 @@ def main() -> int:
         "gps=disabled",
         "camera=disabled",
         "state_transitions=paused",
+        f"calibration_file={config.SENSOR_CALIBRATION_PATH}",
     ]
 
     print(f"Mode:             {'MOCK' if config.USE_MOCK_HARDWARE else 'REAL HARDWARE'}")
@@ -174,7 +175,7 @@ def main() -> int:
 
     header = (
         "sample | imu | baro | ahrs | roll pitch yaw | "
-        "gyro_dps xyz | accel xyz | mag xyz | baro_m hPa C | gimbal pitch roll"
+        "gyro_dps xyz | accel xyz | mag xyz | baro_m hPa C | gimbal servo stepper"
     )
     print(header)
     print("-" * len(header))
@@ -188,7 +189,7 @@ def main() -> int:
             accel = (0.0, 0.0, 0.0)
             mag = (0.0, 0.0, 0.0)
             altitude = pressure = temperature = float("nan")
-            gimbal_pitch = gimbal_roll = 0.0
+            gimbal_servo = gimbal_stepper = 0.0
 
             if imu.device is not None:
                 try:
@@ -201,13 +202,19 @@ def main() -> int:
                     gyro = (state.gyro_x_dps, state.gyro_y_dps, state.gyro_z_dps)
                     accel = raw.accel_mps2 or accel
                     mag = raw.mag_ut or mag
-                    gimbal_pitch = max(
-                        config.GIMBAL_PITCH_MIN,
-                        min(config.GIMBAL_PITCH_MAX, -pitch * config.GIMBAL_POSE_DAMPING_GAIN),
+                    gimbal_servo = max(
+                        config.GIMBAL_SERVO_MIN,
+                        min(
+                            config.GIMBAL_SERVO_MAX,
+                            config.GIMBAL_SERVO_CENTER + config.GIMBAL_SERVO_SIGN * pitch,
+                        ),
                     )
-                    gimbal_roll = max(
-                        config.GIMBAL_ROLL_MIN,
-                        min(config.GIMBAL_ROLL_MAX, -roll * config.GIMBAL_POSE_DAMPING_GAIN),
+                    gimbal_stepper = max(
+                        config.GIMBAL_STEPPER_MIN_DEG,
+                        min(
+                            config.GIMBAL_STEPPER_MAX_DEG,
+                            config.GIMBAL_STEPPER_HOME_DEG + config.GIMBAL_STEPPER_SIGN * roll,
+                        ),
                     )
                 except Exception as exc:
                     failure_count += 1
@@ -227,11 +234,16 @@ def main() -> int:
             if gimbal.device is not None and not args.no_servo_motion:
                 try:
                     sweep = math.sin(sample * 0.4)
-                    command_pitch = gimbal_pitch if imu_ok else 8.0 * sweep
-                    command_roll = gimbal_roll if imu_ok else -8.0 * sweep
-                    gimbal.device.set_angles(command_pitch, command_roll)
-                    gimbal_pitch = command_pitch
-                    gimbal_roll = command_roll
+                    if imu_ok:
+                        command = gimbal.device.point_down(roll, pitch, period)
+                    else:
+                        gimbal.device.set_angles(8.0 * sweep, -8.0 * sweep)
+                        command = {
+                            "servo_angle_deg": config.GIMBAL_SERVO_CENTER + 8.0 * sweep,
+                            "stepper_angle_deg": -8.0 * sweep,
+                        }
+                    gimbal_servo = command["servo_angle_deg"]
+                    gimbal_stepper = command["stepper_angle_deg"]
                 except Exception as exc:
                     failure_count += 1
                     log_lines.append(f"sample {sample} gimbal command fail: {exc}")
@@ -244,7 +256,7 @@ def main() -> int:
                 f"{accel[0]:+6.2f} {accel[1]:+6.2f} {accel[2]:+6.2f} | "
                 f"{mag[0]:+6.2f} {mag[1]:+6.2f} {mag[2]:+6.2f} | "
                 f"{altitude:7.2f} {pressure:7.2f} {temperature:6.2f} | "
-                f"{gimbal_pitch:+6.2f} {gimbal_roll:+6.2f}"
+                f"{gimbal_servo:+6.2f} {gimbal_stepper:+6.2f}"
             )
             print(line)
             log_lines.append(line)

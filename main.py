@@ -112,7 +112,9 @@ def log_terminal_snapshot(shared: SharedData) -> None:
     logger.info(
         "VERIFY state=%s t=%.1fs baro=%.2fm imu=%s rpy=(%.2f, %.2f, %.2f) "
         "ahrs=%s/%s ahrs_rpy=(%.2f, %.2f, %.2f) gyro=(%.2f, %.2f, %.2f) "
-        "accel=(%.2f, %.2f, %.2f) mag=(%.2f, %.2f, %.2f)",
+        "raw_gyro=(%.4f, %.4f, %.4f) accel=(%.2f, %.2f, %.2f) "
+        "mag=(%.2f, %.2f, %.2f) pressure=%.2fhPa temp=%.2fC "
+        "gimbal=%s deflect_xy=(%.2f, %.2f) cmd_stepper=%.2f cmd_servo=%.2f steps=%d",
         snap.state,
         snap.mission_time,
         snap.baro_altitude,
@@ -128,12 +130,23 @@ def log_terminal_snapshot(shared: SharedData) -> None:
         snap.gyro_x,
         snap.gyro_y,
         snap.gyro_z,
+        snap.raw_gyro_x,
+        snap.raw_gyro_y,
+        snap.raw_gyro_z,
         snap.raw_accel_x,
         snap.raw_accel_y,
         snap.raw_accel_z,
         snap.raw_mag_x,
         snap.raw_mag_y,
         snap.raw_mag_z,
+        snap.raw_baro_pressure_hpa,
+        snap.raw_baro_temperature_c,
+        "OK" if snap.gimbal_ok else "BAD",
+        snap.gimbal_x_deflection_deg,
+        snap.gimbal_y_deflection_deg,
+        snap.gimbal_stepper_angle_deg,
+        snap.gimbal_servo_angle_deg,
+        snap.gimbal_stepper_steps,
     )
 
 

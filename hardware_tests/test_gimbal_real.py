@@ -1,11 +1,9 @@
 """
-2-axis gimbal hardware test through the GARUDA HAT PCA9685 servo controller.
+2-axis gimbal hardware test through the GARUDA HAT stepper + PCA9685 servo.
 
 Wiring:
-  PCA9685 servo controller -> I2C SDA/SCL on the GARUDA HAT
-  OE                       -> GPIO4 (physical pin 7)
-  Pan servo                -> PCA9685 channel from config.GIMBAL_PAN_CHANNEL
-  Tilt servo               -> PCA9685 channel from config.GIMBAL_TILT_CHANNEL
+  Stepper                  -> ULN2003 pins from config.ULN2003_IN*
+  Servo                    -> PCA9685 channel config.GIMBAL_SERVO_CHANNEL
   Servo VCC                -> external 5V rail from servo supply
   Servo GND                -> common GND with Pi
 
@@ -22,80 +20,83 @@ from hw_common import banner, ensure_dirs, is_raspberry_pi, result, write_log
 
 import config
 
-PAN_SERVO_CHANNEL = config.GIMBAL_PAN_CHANNEL
-TILT_SERVO_CHANNEL = config.GIMBAL_TILT_CHANNEL
-CENTER_PAN = 90
-CENTER_TILT = 90
+SERVO_CHANNEL = config.GIMBAL_SERVO_CHANNEL
 STEP_DELAY_SEC = 1.2
 
 MOVEMENTS = [
-    ("center", CENTER_PAN, CENTER_TILT),
-    ("pan left", CENTER_PAN - 20, CENTER_TILT),
-    ("pan right", CENTER_PAN + 20, CENTER_TILT),
-    ("tilt up", CENTER_PAN, CENTER_TILT - 15),
-    ("tilt down", CENTER_PAN, CENTER_TILT + 15),
-    ("center", CENTER_PAN, CENTER_TILT),
+    ("center", 0.0, 0.0),
+    ("opp x deflect +12", 12.0, 0.0),
+    ("opp x deflect -12", -12.0, 0.0),
+    ("opp y deflect +10", 0.0, 10.0),
+    ("opp y deflect -10", 0.0, -10.0),
+    ("combined", 8.0, -8.0),
+    ("center", 0.0, 0.0),
 ]
 
 
 def main() -> int:
-    banner("Hardware Test: 2-Axis Gimbal (PCA9685)")
+    banner("Hardware Test: Gimbal Stepper + Servo")
     ensure_dirs()
     log_lines: list[str] = []
 
     print(f"Servo controller: PCA9685 at I2C address 0x{config.SERVO_CONTROLLER_ADDRESS:02X}")
     print(f"I2C pins:         SDA=GPIO{config.I2C_SDA_PIN} pin 3, SCL=GPIO{config.I2C_SCL_PIN} pin 5")
     print(f"OE pin:           GPIO{config.SERVO_OE_PIN} (physical pin 7)")
-    print(f"Pan channel:      {PAN_SERVO_CHANNEL}")
-    print(f"Tilt channel:     {TILT_SERVO_CHANNEL}")
-    print(f"Center position:  pan={CENTER_PAN} deg tilt={CENTER_TILT} deg")
+    print(f"Servo channel:    {SERVO_CHANNEL} (opposite Y axis)")
+    print(
+        "Stepper pins:     "
+        f"IN1=GPIO{config.ULN2003_IN1_PIN}, IN2=GPIO{config.ULN2003_IN2_PIN}, "
+        f"IN3=GPIO{config.ULN2003_IN3_PIN}, IN4=GPIO{config.ULN2003_IN4_PIN} "
+        "(opposite X axis)"
+    )
+    print(f"Center servo:     {config.GIMBAL_SERVO_CENTER} deg")
     print()
     result(
         "WARNING",
-        "Do not power servos from Raspberry Pi 5V. Use the HAT servo power rail "
-        "and keep Pi, HAT, and servo grounds common.",
+        "Use external servo/stepper power sized for motor current and keep Pi, "
+        "HAT, and motor grounds common.",
     )
     log_lines.append("External power warning shown")
     print()
 
     if not is_raspberry_pi():
-        result("WARNING", "Not running on Raspberry Pi - I2C servo control will not work.")
+        result("WARNING", "Not running on Raspberry Pi - GPIO/I2C motor control will not work.")
         log_lines.append("WARNING: not on Pi")
 
     try:
-        from adafruit_servokit import ServoKit
-    except ImportError:
-        result("FAIL", "adafruit-circuitpython-servokit not installed.")
+        from gimbal.servo_control import create_gimbal
+    except ImportError as exc:
+        result("FAIL", f"Gimbal imports failed: {exc}")
         print("Install: pip install adafruit-circuitpython-servokit")
-        write_log("test_gimbal_real.log", ["FAIL: adafruit_servokit missing"])
+        write_log("test_gimbal_real.log", [f"FAIL: import {exc}"])
         return 1
 
-    kit = None
+    gimbal = None
     try:
-        kit = ServoKit(channels=16, address=config.SERVO_CONTROLLER_ADDRESS)
-        pan = kit.servo[PAN_SERVO_CHANNEL]
-        tilt = kit.servo[TILT_SERVO_CHANNEL]
-        pan.set_pulse_width_range(500, 2500)
-        tilt.set_pulse_width_range(500, 2500)
+        config.USE_MOCK_HARDWARE = False
+        gimbal = create_gimbal()
     except Exception as exc:
-        result("FAIL", f"Cannot init PCA9685 gimbal servos: {exc}")
-        print("Check I2C wiring, HAT power, and run: python hardware_tests/test_i2c_scan.py")
+        result("FAIL", f"Cannot init gimbal: {exc}")
+        print("Check I2C wiring, HAT power, ULN2003 pins, and run: python hardware_tests/test_i2c_scan.py")
         write_log("test_gimbal_real.log", [f"FAIL: {exc}"])
         return 1
 
-    result("INFO", f"Pan=channel {PAN_SERVO_CHANNEL}, Tilt=channel {TILT_SERVO_CHANNEL}")
-    log_lines.append(f"Channels: pan={PAN_SERVO_CHANNEL} tilt={TILT_SERVO_CHANNEL}")
+    result("INFO", f"Stepper axis={config.GIMBAL_STEPPER_AXIS}, servo channel={SERVO_CHANNEL}")
+    log_lines.append(f"Stepper axis={config.GIMBAL_STEPPER_AXIS} servo={SERVO_CHANNEL}")
 
     try:
-        for label, pan_angle, tilt_angle in MOVEMENTS:
-            print(f"  -> {label}: pan={pan_angle} deg tilt={tilt_angle} deg")
-            log_lines.append(f"{label}: pan={pan_angle} tilt={tilt_angle}")
-            pan.angle = pan_angle
-            tilt.angle = tilt_angle
+        for label, x_deflection, y_deflection in MOVEMENTS:
+            command = gimbal.point_down(x_deflection, y_deflection, STEP_DELAY_SEC)
+            line = (
+                f"{label}: x_deflect={x_deflection:+.1f} y_deflect={y_deflection:+.1f} "
+                f"stepper={command['stepper_angle_deg']:+.1f} "
+                f"servo={command['servo_angle_deg']:+.1f} "
+                f"steps={command['stepper_steps']}"
+            )
+            print(f"  -> {line}")
+            log_lines.append(line)
             time.sleep(STEP_DELAY_SEC)
 
-        pan.angle = None
-        tilt.angle = None
         result("PASS", "Gimbal movement sequence completed.")
         log_lines.append("PASS")
         code = 0
@@ -105,9 +106,8 @@ def main() -> int:
         log_lines.append(f"FAIL: {exc}")
         code = 1
     finally:
-        if kit is not None:
-            kit.servo[PAN_SERVO_CHANNEL].angle = None
-            kit.servo[TILT_SERVO_CHANNEL].angle = None
+        if gimbal is not None:
+            gimbal.close()
 
     log_path = write_log("test_gimbal_real.log", log_lines)
     print(f"Log saved: {log_path}")

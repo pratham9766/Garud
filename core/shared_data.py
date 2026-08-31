@@ -32,6 +32,9 @@ class PayloadSnapshot:
     gyro_x: float = 0.0
     gyro_y: float = 0.0
     gyro_z: float = 0.0
+    raw_gyro_x: float = 0.0
+    raw_gyro_y: float = 0.0
+    raw_gyro_z: float = 0.0
     raw_accel_x: float = 0.0
     raw_accel_y: float = 0.0
     raw_accel_z: float = 0.0
@@ -42,6 +45,17 @@ class PayloadSnapshot:
     raw_quat_x: float = 0.0
     raw_quat_y: float = 0.0
     raw_quat_z: float = 0.0
+    raw_imu_timestamp_ns: int = 0
+    raw_imu_accuracy_rad: float = 0.0
+    raw_imu_calibration_status: int = -1
+    raw_baro_pressure_hpa: float = 0.0
+    raw_baro_temperature_c: float = 0.0
+    gimbal_x_deflection_deg: float = 0.0
+    gimbal_y_deflection_deg: float = 0.0
+    gimbal_stepper_angle_deg: float = 0.0
+    gimbal_servo_angle_deg: float = 90.0
+    gimbal_stepper_steps: int = 0
+    gimbal_ok: bool = False
     ahrs_enabled: bool = False
     ahrs_source: str = "OFF"
     ahrs_valid: bool = False
@@ -80,8 +94,13 @@ class SharedData:
         "ahrs_healthy,ahrs_confidence,quat_w,quat_x,quat_y,quat_z,ahrs_roll,"
         "ahrs_pitch,ahrs_yaw,attitude_accuracy_rad,imu_sample_age_ms,"
         "accel_correction_active,mag_correction_active,ahrs_timestamp_ns,"
-        "raw_accel_x,raw_accel_y,raw_accel_z,raw_mag_x,raw_mag_y,raw_mag_z,"
-        "raw_quat_w,raw_quat_x,raw_quat_y,raw_quat_z"
+        "raw_gyro_x,raw_gyro_y,raw_gyro_z,raw_accel_x,raw_accel_y,raw_accel_z,"
+        "raw_mag_x,raw_mag_y,raw_mag_z,raw_quat_w,raw_quat_x,raw_quat_y,"
+        "raw_quat_z,raw_imu_timestamp_ns,raw_imu_accuracy_rad,"
+        "raw_imu_calibration_status,raw_baro_pressure_hpa,"
+        "raw_baro_temperature_c,gimbal_x_deflection_deg,gimbal_y_deflection_deg,"
+        "gimbal_stepper_angle_deg,gimbal_servo_angle_deg,gimbal_stepper_steps,"
+        "gimbal_ok"
     )
 
     def __init__(self) -> None:
@@ -167,8 +186,14 @@ class SharedData:
             f"{snap.attitude_accuracy_rad:.6f},{snap.imu_sample_age_ms:.2f},"
             f"{int(snap.accel_correction_active)},{int(snap.mag_correction_active)},"
             f"{snap.ahrs_timestamp_ns},"
+            f"{snap.raw_gyro_x:.6f},{snap.raw_gyro_y:.6f},{snap.raw_gyro_z:.6f},"
             f"{snap.raw_accel_x:.4f},{snap.raw_accel_y:.4f},{snap.raw_accel_z:.4f},"
             f"{snap.raw_mag_x:.4f},{snap.raw_mag_y:.4f},{snap.raw_mag_z:.4f},"
             f"{snap.raw_quat_w:.8f},{snap.raw_quat_x:.8f},{snap.raw_quat_y:.8f},"
-            f"{snap.raw_quat_z:.8f}"
+            f"{snap.raw_quat_z:.8f},{snap.raw_imu_timestamp_ns},"
+            f"{snap.raw_imu_accuracy_rad:.6f},{snap.raw_imu_calibration_status},"
+            f"{snap.raw_baro_pressure_hpa:.4f},{snap.raw_baro_temperature_c:.4f},"
+            f"{snap.gimbal_x_deflection_deg:.3f},{snap.gimbal_y_deflection_deg:.3f},"
+            f"{snap.gimbal_stepper_angle_deg:.3f},{snap.gimbal_servo_angle_deg:.3f},"
+            f"{snap.gimbal_stepper_steps},{int(snap.gimbal_ok)}"
         )

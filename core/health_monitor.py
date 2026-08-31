@@ -39,6 +39,8 @@ def health_monitor_loop(
             issues.append("Barometer")
         if config.ENABLE_CAMERA and not snap.camera_ok:
             issues.append("Camera")
+        if config.ENABLE_GIMBAL and not snap.gimbal_ok:
+            issues.append("Gimbal")
         if config.ENABLE_TELEMETRY and not snap.telemetry_ok:
             issues.append("Telemetry")
 

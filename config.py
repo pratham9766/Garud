@@ -123,7 +123,8 @@ PCA9685_I2C_ADDRESS = 0x40
 PCA9685_PWM_FREQ = 50
 SERVO_CONTROLLER_ADDRESS = PCA9685_I2C_ADDRESS
 GIMBAL_PAN_CHANNEL = 0
-GIMBAL_TILT_CHANNEL = 1
+GIMBAL_TILT_CHANNEL = 0
+GIMBAL_SERVO_CHANNEL = 0
 
 BMP388_CS_PIN = 8
 BMP388_CS = _board_pin("D8", BMP388_CS_PIN)
@@ -251,6 +252,7 @@ MAPPING_REFINE_DISTORTION = False
 MAPPING_INTERPOLATE_SENSOR_TIMELINE = False
 MAPPING_CACHE_VERSION = "v1"
 POSTFLIGHT_SAVE_PATH = PROJECT_ROOT / "data" / "postflight"
+SENSOR_CALIBRATION_PATH = LOG_SAVE_PATH / "sensor_calibration.json"
 
 # Post-flight image quality thresholds.
 QUALITY_BLUR_MIN_VARIANCE = 80.0
@@ -267,3 +269,32 @@ QUALITY_MARGINAL_MIN_SCORE = 0.40
 # Logging
 # ---------------------------------------------------------------------------
 LOG_LEVEL = "INFO"
+
+# ---------------------------------------------------------------------------
+# Sensor calibration
+# ---------------------------------------------------------------------------
+APPLY_SENSOR_CALIBRATION = True
+CALIBRATION_SAMPLE_RATE_HZ = 20.0
+CALIBRATION_DEFAULT_SECONDS = 20.0
+CALIBRATION_STATIONARY_GYRO_MAX_DPS = 3.0
+CALIBRATION_ACCEL_NORM_MIN = 8.0
+CALIBRATION_ACCEL_NORM_MAX = 11.5
+
+# ---------------------------------------------------------------------------
+# Gimbal geometry and control
+# ---------------------------------------------------------------------------
+# Mechanical setup: stepper corrects the opposite X-axis deflection, while the
+# PCA9685 servo on channel 0 corrects the opposite Y-axis deflection.
+GIMBAL_STEPPER_AXIS = "OPP_X"
+GIMBAL_SERVO_AXIS = "OPP_Y"
+GIMBAL_STEPPER_SIGN = -1
+GIMBAL_SERVO_SIGN = -1
+GIMBAL_STEPPER_HOME_DEG = 0.0
+GIMBAL_STEPPER_MIN_DEG = -90.0
+GIMBAL_STEPPER_MAX_DEG = 90.0
+GIMBAL_STEPS_PER_DEG = 11.3777777778  # 4096 half-steps / 360 deg
+GIMBAL_MAX_STEPS_PER_TICK = 24
+GIMBAL_DEFLECTION_DEADBAND_DEG = 1.0
+GIMBAL_LOOP_HZ = 5.0
+GIMBAL_SERVO_RATE_LIMIT_DPS = 45.0
+GIMBAL_STEPPER_RATE_LIMIT_DPS = 60.0

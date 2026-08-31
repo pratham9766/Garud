@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 import config
 from core.mission_state import MissionState
 from core.shared_data import SharedData
+from sensors.calibration import barometer_sea_level_pressure, load_calibration
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,9 @@ class RealBarometer(BaseBarometer):
         from sensors.bmp388_sensor import BMP388Sensor
 
         self._sensor = BMP388Sensor(bus_manager.get_spi())
+        sea_level_pressure = barometer_sea_level_pressure(load_calibration())
+        if sea_level_pressure is not None:
+            self._sensor.set_sea_level_pressure(sea_level_pressure)
         logger.info("BMP388 initialized on SPI0 CS/GPIO%d.", config.BMP388_CS_PIN)
 
     def read(self) -> dict:
@@ -95,6 +99,8 @@ def barometer_worker(shared: SharedData, stop_event: threading.Event) -> None:
                 reading = baro.read()
                 shared.update(
                     baro_altitude=reading["altitude"],
+                    raw_baro_pressure_hpa=reading.get("pressure", 0.0),
+                    raw_baro_temperature_c=reading.get("temperature", 0.0),
                     barometer_ok=True,
                 )
             except Exception as exc:
