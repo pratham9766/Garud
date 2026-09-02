@@ -848,67 +848,92 @@ def build_verification_summary(snap, diagnostics: dict[str, Any], data_logging_e
     workers: dict[str, dict[str, Any]] = diagnostics.get("workers", {})
     events = diagnostics.get("events", [])
 
-    def category(names: list[str], extra_reasons: list[str] | None = None) -> dict[str, Any]:
-        reasons = list(extra_reasons or [])
-        active = False
-        worst = "PASS"
-        for name in names:
-            worker = workers.get(name)
-            if worker is None:
-                reasons.append(f"{name} has not reported yet.")
-                worst = "WARN" if worst == "PASS" else worst
-                continue
-            status = worker.get("status", "INITIALIZING")
-            reason = worker.get("reason") or status
-            if status == "DISABLED":
-                reasons.append(f"{name} disabled.")
-                continue
-            active = True
-            if status in ("ERROR", "STALE"):
-                worst = "FAIL"
-                reasons.append(f"{name}: {reason}")
-            elif status in ("DEGRADED", "INITIALIZING"):
-                if worst != "FAIL":
-                    worst = "WARN"
-                reasons.append(f"{name}: {reason}")
-        if not active and worst != "FAIL":
-            worst = "SKIP"
-        if not reasons:
-            reasons.append("Nominal.")
+    def status_order(status: str) -> int:
+        return {"SKIP": 0, "PASS": 1, "WARN": 2, "FAIL": 3}.get(status, 0)
+
+    def worker_verdict(name: str, enabled: bool) -> tuple[str, str]:
+        if not enabled:
+            return "SKIP", f"{name} skipped by active test profile."
+        worker = workers.get(name)
+        if worker is None:
+            return "WARN", f"{name} has not reported yet."
+        status = worker.get("status", "INITIALIZING")
+        reason = worker.get("reason") or status
+        if status == "DISABLED":
+            return "SKIP", f"{name} skipped: {reason}"
+        if status in ("ERROR", "STALE", "FAILED"):
+            return "FAIL", f"{name}: {reason}"
+        if status in ("DEGRADED", "INITIALIZING"):
+            return "WARN", f"{name}: {reason}"
+        return "PASS", f"{name}: {reason}"
+
+    def category(items: list[tuple[str, bool]], extra_reasons: list[str] | None = None) -> dict[str, Any]:
+        reasons: list[str] = []
+        statuses: list[str] = []
+        for name, enabled in items:
+            status, reason = worker_verdict(name, enabled)
+            statuses.append(status)
+            if status != "PASS":
+                reasons.append(reason)
+        for reason in extra_reasons or []:
+            statuses.append("WARN")
+            reasons.append(reason)
+        if not statuses or all(status == "SKIP" for status in statuses):
+            return {"status": "SKIP", "reasons": reasons[:6] or ["Skipped by active test profile."]}
+        worst = max(statuses, key=status_order)
+        if worst == "PASS":
+            reasons = ["Nominal."]
         return {"status": worst, "reasons": reasons[:6]}
 
-    sensors = category(["GPS", "IMU", "Barometer"])
+    sensors = category(
+        [
+            ("GPS", config.ENABLE_GPS),
+            ("IMU", config.ENABLE_IMU),
+            ("Barometer", config.ENABLE_BAROMETER),
+        ]
+    )
     payload_reasons = []
-    if snap.images_missing:
-        payload_reasons.append(f"{snap.images_missing} referenced image(s) missing from storage.")
-    if snap.camera_failed_captures:
-        payload_reasons.append(f"{snap.camera_failed_captures} camera capture failure(s).")
-    if snap.camera_dropped_captures:
-        payload_reasons.append(f"{snap.camera_dropped_captures} dropped camera frame(s).")
-    if snap.image_quality_status in ("LOW_SHARPNESS", "BAD_EXPOSURE", "UNAVAILABLE"):
-        payload_reasons.append(f"Image quality {snap.image_quality_status}.")
-    payload = category(["Camera", "Gimbal", "ImageQuality", "Storage"], payload_reasons)
+    if config.ENABLE_CAMERA:
+        if snap.images_missing:
+            payload_reasons.append(f"{snap.images_missing} referenced image(s) missing from storage.")
+        if snap.camera_failed_captures:
+            payload_reasons.append(f"{snap.camera_failed_captures} camera capture failure(s).")
+        if snap.camera_dropped_captures:
+            payload_reasons.append(f"{snap.camera_dropped_captures} dropped camera frame(s).")
+        if snap.image_quality_status in ("LOW_SHARPNESS", "BAD_EXPOSURE", "UNAVAILABLE"):
+            payload_reasons.append(f"Image quality {snap.image_quality_status}.")
+    payload = category(
+        [
+            ("Camera", config.ENABLE_CAMERA),
+            ("Gimbal", config.ENABLE_GIMBAL),
+            ("ImageQuality", config.ENABLE_CAMERA),
+            ("Storage", config.ENABLE_CAMERA),
+        ],
+        payload_reasons,
+    )
     logging_reasons = []
-    if snap.logger_errors:
-        logging_reasons.append(f"{snap.logger_errors} logger error(s).")
-    if data_logging_enabled and snap.logger_rows_written == 0 and snap.mission_time > 2.0:
-        logging_reasons.append("Logger has not written rows yet.")
-    logging_summary = category(["DataLogger"], logging_reasons)
+    if data_logging_enabled:
+        if snap.logger_errors:
+            logging_reasons.append(f"{snap.logger_errors} logger error(s).")
+        if snap.logger_rows_written == 0 and snap.mission_time > 2.0:
+            logging_reasons.append("Logger has not written rows yet.")
+    logging_summary = category([("DataLogger", config.ENABLE_LOGGING and data_logging_enabled)], logging_reasons)
     power_reasons = []
     if snap.undervoltage_events:
         power_reasons.append(f"{snap.undervoltage_events} undervoltage event(s).")
-    power = category(["Power"], power_reasons)
+    power = category([("Power", True)], power_reasons)
     telemetry_reasons = []
     telemetry = workers.get("Telemetry")
-    if telemetry and telemetry.get("status") not in ("DISABLED", "ERROR", "STALE") and snap.telemetry_tx_count == 0 and snap.mission_time > 2.0:
+    if config.ENABLE_TELEMETRY and telemetry and telemetry.get("status") not in ("DISABLED", "ERROR", "STALE", "FAILED") and snap.telemetry_tx_count == 0 and snap.mission_time > 2.0:
         telemetry_reasons.append("Telemetry worker has not transmitted yet.")
-    telemetry_summary = category(["Telemetry"], telemetry_reasons)
-    system_summary = category(["System"])
+    telemetry_summary = category([("Telemetry", config.ENABLE_TELEMETRY)], telemetry_reasons)
+    navigation_summary = category([("Navigation", config.ENABLE_NAVIGATION_ESTIMATOR)])
+    system_summary = category([("System", True)])
     state_reasons = []
     blocked = [event for event in events if event.get("event_type") == "STATE_TRANSITION_BLOCKED"]
     if blocked:
         state_reasons.append(f"{len(blocked)} blocked state transition(s).")
-    if snap.test_mode == "FLIGHT" and diagnostics.get("faults"):
+    if snap.test_mode == "FLIGHT" and any(diagnostics.get("faults", {}).values()):
         state_reasons.append("Fault injection should not be active in flight mode.")
     state_flow = {
         "status": "FAIL" if snap.state == MissionState.ERROR.value else ("WARN" if state_reasons else "PASS"),
@@ -919,24 +944,31 @@ def build_verification_summary(snap, diagnostics: dict[str, Any], data_logging_e
         "Payload": payload,
         "Logging": logging_summary,
         "Power": power,
+        "Navigation": navigation_summary,
         "Telemetry": telemetry_summary,
         "System": system_summary,
         "StateFlow": state_flow,
     }
-    order = {"FAIL": 3, "WARN": 2, "PASS": 1, "SKIP": 0}
-    overall = max((item["status"] for item in categories.values()), key=lambda status: order.get(status, 0))
-    return {"overall": overall, "categories": categories}
+    overall = max((item["status"] for item in categories.values()), key=status_order)
+    return {"overall": overall, "profile": snap.test_mode, "categories": categories}
 
 
 def build_report_verification_summary(report: dict[str, Any]) -> dict[str, Any]:
     workers = report.get("workers", {})
     events = report.get("events", [])
+    profile_config = report.get("config", {})
 
-    def summarize(names: list[str]) -> dict[str, Any]:
+    def enabled(key: str) -> bool:
+        return bool(profile_config.get(key, getattr(config, key, False)))
+
+    def summarize(items: list[tuple[str, bool]]) -> dict[str, Any]:
         active = False
         status = "PASS"
         reasons: list[str] = []
-        for name in names:
+        for name, is_enabled in items:
+            if not is_enabled:
+                reasons.append(f"{name} skipped by active test profile.")
+                continue
             worker = workers.get(name)
             if not worker:
                 status = "WARN" if status == "PASS" else status
@@ -944,10 +976,10 @@ def build_report_verification_summary(report: dict[str, Any]) -> dict[str, Any]:
                 continue
             worker_status = worker.get("status", "INITIALIZING")
             if worker_status == "DISABLED":
-                reasons.append(f"{name} disabled.")
+                reasons.append(f"{name} skipped: {worker.get('reason') or 'Disabled by config.'}")
                 continue
             active = True
-            if worker_status in ("ERROR", "STALE"):
+            if worker_status in ("ERROR", "STALE", "FAILED"):
                 status = "FAIL"
             elif worker_status in ("DEGRADED", "INITIALIZING") and status != "FAIL":
                 status = "WARN"
@@ -962,12 +994,13 @@ def build_report_verification_summary(report: dict[str, Any]) -> dict[str, Any]:
     if blocked:
         state_reasons.append(f"{len(blocked)} blocked state transition(s).")
     categories = {
-        "Sensors": summarize(["GPS", "IMU", "Barometer"]),
-        "Payload": summarize(["Camera", "Gimbal", "ImageQuality", "Storage"]),
-        "Logging": summarize(["DataLogger"]),
-        "Power": summarize(["Power"]),
-        "Telemetry": summarize(["Telemetry"]),
-        "System": summarize(["System"]),
+        "Sensors": summarize([("GPS", enabled("ENABLE_GPS")), ("IMU", enabled("ENABLE_IMU")), ("Barometer", enabled("ENABLE_BAROMETER"))]),
+        "Payload": summarize([("Camera", enabled("ENABLE_CAMERA")), ("Gimbal", enabled("ENABLE_GIMBAL")), ("ImageQuality", enabled("ENABLE_CAMERA")), ("Storage", enabled("ENABLE_CAMERA"))]),
+        "Logging": summarize([("DataLogger", enabled("ENABLE_LOGGING"))]),
+        "Power": summarize([("Power", True)]),
+        "Navigation": summarize([("Navigation", enabled("ENABLE_NAVIGATION_ESTIMATOR"))]),
+        "Telemetry": summarize([("Telemetry", enabled("ENABLE_TELEMETRY"))]),
+        "System": summarize([("System", True)]),
         "StateFlow": {"status": "WARN" if state_reasons else "PASS", "reasons": state_reasons or ["No blocked transitions recorded."]},
     }
     order = {"FAIL": 3, "WARN": 2, "PASS": 1, "SKIP": 0}
@@ -1040,6 +1073,7 @@ def dashboard_snapshot(
         "states": [state.value for state in MissionState],
         "mock": config.USE_MOCK_HARDWARE,
         "mode": snap.test_mode,
+        "test_profile": snap.test_mode,
         "manual_state_allowed": control.can_mutate_state(),
         "auto_transitions": control.is_auto(),
         "state": snap.state,
@@ -1048,6 +1082,13 @@ def dashboard_snapshot(
         "longitude": snap.longitude,
         "gps_altitude": snap.gps_altitude,
         "baro_altitude": snap.baro_altitude,
+        "baro": {
+            "agl_m": snap.baro_altitude,
+            "raw_agl_m": getattr(snap, "raw_baro_altitude_m", snap.baro_altitude),
+            "filtered_agl_m": snap.baro_altitude,
+            "pressure_hpa": snap.raw_baro_pressure_hpa,
+            "temperature_c": snap.raw_baro_temperature_c,
+        },
         "vertical_velocity": snap.vertical_velocity,
         "max_altitude": snap.max_altitude,
         "roll": snap.ahrs_roll if snap.ahrs_healthy else snap.roll,
