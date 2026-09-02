@@ -1223,6 +1223,14 @@ def parse_json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
 def config_snapshot() -> dict[str, Any]:
     keys = [
         "USE_MOCK_HARDWARE",
+        "ENABLE_GPS",
+        "ENABLE_IMU",
+        "ENABLE_BAROMETER",
+        "ENABLE_CAMERA",
+        "ENABLE_GIMBAL",
+        "ENABLE_TELEMETRY",
+        "ENABLE_LOGGING",
+        "ENABLE_NAVIGATION_ESTIMATOR",
         "IMAGE_CAPTURE_INTERVAL_SEC",
         "SENSOR_LOG_INTERVAL_SEC",
         "TELEMETRY_INTERVAL_SEC",
@@ -1234,7 +1242,6 @@ def config_snapshot() -> dict[str, Any]:
         "TELEMETRY_EXPECTED_HZ",
         "LOGGER_EXPECTED_HZ",
         "GPS_HDOP_DEGRADED",
-        "ENABLE_NAVIGATION_ESTIMATOR",
         "NAVIGATION_RATE_HZ",
         "NAV_MIN_SATELLITES",
         "NAV_MAX_HDOP",
