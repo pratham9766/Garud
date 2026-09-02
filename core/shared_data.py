@@ -87,7 +87,14 @@ class PayloadSnapshot:
     latitude: float = 0.0
     longitude: float = 0.0
     gps_altitude: float = 0.0
+    gps_ground_speed_mps: float = 0.0
+    gps_course_deg: float = 0.0
+    gps_satellites: int = 0
+    gps_hdop: float = 0.0
+    gps_fix_type: str = "NO FIX"
+    gps_timestamp_ns: int = 0
     baro_altitude: float = 0.0
+    baro_timestamp_ns: int = 0
     vertical_velocity: float = 0.0
     max_altitude: float = 0.0
     roll: float = 0.0
@@ -187,6 +194,39 @@ class PayloadSnapshot:
     imu_ok: bool = False
     barometer_ok: bool = False
     telemetry_ok: bool = False
+    nav_timestamp_ns: int = 0
+    nav_origin_latitude: float = 0.0
+    nav_origin_longitude: float = 0.0
+    estimated_latitude: float = 0.0
+    estimated_longitude: float = 0.0
+    estimated_north_m: float = 0.0
+    estimated_east_m: float = 0.0
+    estimated_altitude_m: float = 0.0
+    estimated_agl_m: float = 0.0
+    estimated_velocity_north_mps: float = 0.0
+    estimated_velocity_east_mps: float = 0.0
+    estimated_ground_speed_mps: float = 0.0
+    estimated_course_deg: float = 0.0
+    estimated_heading_deg: float = 0.0
+    navigation_mode: str = "INITIALIZING"
+    position_quality: str = "INVALID"
+    heading_quality: str = "INVALID"
+    altitude_quality: str = "INVALID"
+    position_source: str = "NONE"
+    nav_gps_valid: bool = False
+    nav_gps_rejected: bool = False
+    nav_gps_rejection_reason: str = "NO_SAMPLE"
+    nav_gps_age_ms: float = -1.0
+    nav_gps_position_error_m: float = -1.0
+    dead_reckoning_active: bool = False
+    dead_reckoning_age_s: float = 0.0
+    recovery_active: bool = False
+    navigation_valid: bool = False
+    safe_for_guidance: bool = False
+    nav_consecutive_good_gps: int = 0
+    nav_consecutive_bad_gps: int = 0
+    estimator_reset_count: int = 0
+    nav_last_event: str = ""
 
 
 class SharedData:
@@ -217,7 +257,19 @@ class SharedData:
         "image_quality_sharpness,image_quality_brightness,"
         "image_quality_underexposed_fraction,image_quality_overexposed_fraction,"
         "image_quality_status,images_referenced,images_present,images_missing,"
-        "images_orphan"
+        "images_orphan,gps_ground_speed_mps,gps_course_deg,gps_satellites,"
+        "gps_hdop,gps_fix_type,gps_timestamp_ns,baro_timestamp_ns,"
+        "nav_timestamp_ns,nav_origin_latitude,nav_origin_longitude,"
+        "estimated_latitude,estimated_longitude,estimated_north_m,"
+        "estimated_east_m,estimated_altitude_m,estimated_agl_m,"
+        "estimated_velocity_north_mps,estimated_velocity_east_mps,"
+        "estimated_ground_speed_mps,estimated_course_deg,estimated_heading_deg,"
+        "navigation_mode,position_quality,heading_quality,altitude_quality,"
+        "position_source,nav_gps_valid,nav_gps_rejected,"
+        "nav_gps_rejection_reason,nav_gps_age_ms,nav_gps_position_error_m,"
+        "dead_reckoning_active,dead_reckoning_age_s,recovery_active,"
+        "navigation_valid,safe_for_guidance,nav_consecutive_good_gps,"
+        "nav_consecutive_bad_gps,estimator_reset_count,nav_last_event"
     )
 
     def __init__(self) -> None:
@@ -574,6 +626,19 @@ class SharedData:
             ahrs_timestamp_ns=attitude.timestamp_ns,
         )
 
+    def publish_navigation(self, navigation_state: Any) -> None:
+        """Atomically publish one coherent estimated navigation state."""
+        updates = navigation_state.as_shared_updates()
+        with self._lock:
+            for key, value in updates.items():
+                if hasattr(self._data, key):
+                    setattr(self._data, key, value)
+                else:
+                    raise AttributeError(f"Unknown shared field: {key}")
+            self._data.timestamp = time.time()
+            if self._mission_start is not None:
+                self._data.mission_time = time.time() - self._mission_start
+
     def get_snapshot(self) -> PayloadSnapshot:
         """Return a copy of the current data (safe to use outside the lock)."""
         with self._lock:
@@ -628,5 +693,23 @@ class SharedData:
             f"{snap.image_quality_underexposed_fraction:.5f},"
             f"{snap.image_quality_overexposed_fraction:.5f},"
             f"{snap.image_quality_status},{snap.images_referenced},"
-            f"{snap.images_present},{snap.images_missing},{snap.images_orphan}"
+            f"{snap.images_present},{snap.images_missing},{snap.images_orphan},"
+            f"{snap.gps_ground_speed_mps:.3f},{snap.gps_course_deg:.3f},"
+            f"{snap.gps_satellites},{snap.gps_hdop:.3f},{snap.gps_fix_type},"
+            f"{snap.gps_timestamp_ns},{snap.baro_timestamp_ns},{snap.nav_timestamp_ns},"
+            f"{snap.nav_origin_latitude:.8f},{snap.nav_origin_longitude:.8f},"
+            f"{snap.estimated_latitude:.8f},{snap.estimated_longitude:.8f},"
+            f"{snap.estimated_north_m:.3f},{snap.estimated_east_m:.3f},"
+            f"{snap.estimated_altitude_m:.3f},{snap.estimated_agl_m:.3f},"
+            f"{snap.estimated_velocity_north_mps:.3f},{snap.estimated_velocity_east_mps:.3f},"
+            f"{snap.estimated_ground_speed_mps:.3f},{snap.estimated_course_deg:.3f},"
+            f"{snap.estimated_heading_deg:.3f},{snap.navigation_mode},"
+            f"{snap.position_quality},{snap.heading_quality},{snap.altitude_quality},"
+            f"{snap.position_source},{int(snap.nav_gps_valid)},{int(snap.nav_gps_rejected)},"
+            f"{snap.nav_gps_rejection_reason},{snap.nav_gps_age_ms:.3f},"
+            f"{snap.nav_gps_position_error_m:.3f},{int(snap.dead_reckoning_active)},"
+            f"{snap.dead_reckoning_age_s:.3f},{int(snap.recovery_active)},"
+            f"{int(snap.navigation_valid)},{int(snap.safe_for_guidance)},"
+            f"{snap.nav_consecutive_good_gps},{snap.nav_consecutive_bad_gps},"
+            f"{snap.estimator_reset_count},{snap.nav_last_event}"
         )

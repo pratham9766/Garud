@@ -50,6 +50,7 @@ class MockGPS(BaseGPS):
         self._lon += 0.00001 * math.cos(angle) + random.uniform(-0.000005, 0.000005)
         self._alt = max(0.0, self._alt - random.uniform(0.0, 0.5))
         return {
+            "timestamp_ns": time.monotonic_ns(),
             "latitude": self._lat,
             "longitude": self._lon,
             "altitude": self._alt,
@@ -93,7 +94,7 @@ class RealGPS(BaseGPS):
     def read(self) -> dict:
         fix = self._gps.read_fix(timeout_s=1.0)
         if not fix:
-            return {**self._last, "fix_ok": False}
+            return {**self._last, "fix_ok": False, "timestamp_ns": time.monotonic_ns()}
 
         if fix.get("lat") is not None:
             self._last["latitude"] = fix["lat"]
@@ -108,7 +109,7 @@ class RealGPS(BaseGPS):
         self._last["hdop"] = fix.get("hdop")
         self._last["ground_speed_mps"] = fix.get("ground_speed_mps")
         self._last["course_deg"] = fix.get("course_deg")
-        return dict(self._last)
+        return {**self._last, "timestamp_ns": time.monotonic_ns()}
 
     def close(self) -> None:
         pass
@@ -155,6 +156,12 @@ def gps_worker(shared: SharedData, stop_event: threading.Event) -> None:
                     latitude=reading["latitude"],
                     longitude=reading["longitude"],
                     gps_altitude=reading["altitude"],
+                    gps_ground_speed_mps=float(reading.get("ground_speed_mps") or 0.0),
+                    gps_course_deg=float(reading.get("course_deg") or 0.0),
+                    gps_satellites=int(reading.get("satellites") or 0),
+                    gps_hdop=float(reading.get("hdop") or 0.0),
+                    gps_fix_type=str(reading.get("fix_type", "NO FIX")),
+                    gps_timestamp_ns=int(reading.get("timestamp_ns") or time.monotonic_ns()),
                     gps_ok=reading["fix_ok"],
                 )
                 fix_ok = bool(reading.get("fix_ok"))

@@ -46,9 +46,36 @@ class DataLogger:
 
     def open(self) -> None:
         """Open log file and write CSV header."""
-        self._file = open(self.log_path, "w", encoding="utf-8")
-        self._file.write(SharedData.CSV_HEADER + "\n")
-        self._file.flush()
+        requested_path = self.log_path
+        for attempt in range(3):
+            try:
+                self._file = open(self.log_path, "w", encoding="utf-8")
+                self._file.write(SharedData.CSV_HEADER + "\n")
+                self._file.flush()
+                break
+            except PermissionError:
+                if self._file is not None:
+                    try:
+                        self._file.close()
+                    except OSError:
+                        pass
+                    self._file = None
+                if attempt == 2:
+                    raise
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                suffix = "" if attempt == 0 else f"_{attempt + 1}"
+                fallback_name = (
+                    f"{requested_path.stem}_{timestamp}{suffix}{requested_path.suffix}"
+                )
+                fallback_path = requested_path.with_name(fallback_name)
+                logger.warning(
+                    "Log file %s is locked or not writable; using %s instead.",
+                    self.log_path,
+                    fallback_path,
+                )
+                self.log_path = fallback_path
+        if self._file is None:
+            raise RuntimeError("Logger did not open a file.")
         logger.info("Data logger opened: %s", self.log_path)
 
     def write_row(self) -> None:

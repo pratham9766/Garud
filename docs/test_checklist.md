@@ -21,6 +21,8 @@ Pre-flight and bring-up checklist for the Ground Mapping Payload.
 - [ ] **AHRS test** - source, quaternion, attitude health, and sample age update; `python hardware_tests/test_ahrs_real.py --mode bno085`
 - [ ] **Live dashboard** - all sensor readings and AHRS state visible; `python hardware_tests/live_sensor_dashboard.py --mode bno085`
 - [ ] **Browser dashboard** - readings plus camera frame visible; `python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0`
+- [ ] **Navigation estimator** - raw GPS and estimated navigation visible; `python hardware_tests/navigation_field_test.py --seconds 60`
+- [ ] **GPS interruption** - bounded dead reckoning and recovery verified; `python hardware_tests/navigation_field_test.py --seconds 90 --simulate-gps-loss-after 30 --simulate-gps-loss-seconds 5`
 - [ ] **Barometer test** - BMP388 altitude reading plausible after real driver is added
 - [ ] **Servo test** - PCA9685 sweep without load; `python hardware_tests/test_servo_real.py`
 - [ ] **Gimbal test** - 2-axis PCA9685 sweep; `python hardware_tests/test_gimbal_real.py`

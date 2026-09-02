@@ -95,6 +95,7 @@ ground_mapping_payload/
 |-- hardware_tests/     Real hardware bring-up scripts
 |-- logging_system/     CSV logger
 |-- mapping/            Fake flight data, HTML map, KML, geotag helpers
+|-- navigation/         Lightweight GPS/baro/AHRS navigation estimator
 |-- processing/         Offline mission validation and preprocessing
 |-- sensor_fusion/      AHRS estimators, quaternion helpers, and pose priors
 |-- storage/            Mission manifest and metadata records
@@ -211,6 +212,7 @@ python hardware_tests/test_ahrs_real.py --mode bno085
 python hardware_tests/live_sensor_dashboard.py --mode bno085
 python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 python hardware_tests/ground_station_dashboard.py --bench --real-hardware --host 0.0.0.0
+python hardware_tests/navigation_field_test.py --seconds 60
 python hardware_tests/test_servo_real.py
 python hardware_tests/test_gimbal_real.py
 python hardware_tests/test_xbee_real.py
@@ -305,6 +307,7 @@ USE_MOCK_HARDWARE = False
 ENABLE_CAMERA = True
 ENABLE_GPS = True
 ENABLE_MAPPING = True
+ENABLE_NAVIGATION_ESTIMATOR = True
 CAMERA_BACKEND = "AUTO"
 CAMERA_DEVICE_INDEX = 0
 GPS_TRANSPORT = "SC16IS750_SPI"
@@ -321,6 +324,8 @@ ULN2003_IN4_PIN = 18
 ENABLE_AHRS = True
 AHRS_MODE = "BNO085"
 AHRS_RATE_HZ = 100
+NAVIGATION_RATE_HZ = 20.0
+NAV_DEAD_RECKON_MAX_SEC = 5.0
 ```
 
 Keep `USE_MOCK_HARDWARE = False` on the Raspberry Pi for real sensor testing.
@@ -380,6 +385,7 @@ MAPPING_COVERAGE_GRID_M = 5.0
 - `docs/USER_MANUAL.md` - operator manual and workflow
 - `docs/architecture_pose_normalization.md` - V1 pose-assisted mapping design
 - `docs/postflight_terrain_mapping.md` - V2 dataset reconstruction workflow and current limitations
+- `docs/navigation_estimator.md` - lightweight glider navigation estimator design, failsafes, and tests
 - `docs/flight_flow.md` - mission state sequence
 - `docs/wiring_plan.md` - wiring notes
 - `docs/pin_map.md` - Raspberry Pi pin assignments
@@ -408,7 +414,9 @@ Use `--duration <seconds>` for a timed run. The dashboard shows GPS,
 barometer, raw BNO085 readings, native quaternion,
 calculated Euler angles, AHRS source/health, quaternion `(w,x,y,z)`, correction
 flags, diagnostics counters, and a telemetry packet preview. It reads sensors
-only and does not move servos.
+only and does not move servos. It also displays estimated latitude/longitude,
+local north/east, VN/VE, ground speed, course, heading, GPS rejection reason,
+dead-reckoning age, recovery state, and `safe_for_guidance`.
 
 For a browser display with the latest camera frame:
 
@@ -417,7 +425,7 @@ python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 ```
 
 Open `http://<raspberry-pi-ip>:8080`. The page refreshes live readings and the
-latest captured camera frame.
+latest captured camera frame, including raw GPS and estimated navigation.
 
 For integrated state-transition and payload verification:
 
@@ -429,6 +437,13 @@ The ground station is separate from `main.py`, so it opens only when this script
 is run. It shows state controls, event-marked graphs, worker health,
 PASS/WARN/FAIL verification, mock-only fault injection, and saved test reports
 under `data/logs/test_reports/`.
+
+For outdoor static/walking navigation validation:
+
+```bash
+python hardware_tests/navigation_field_test.py --seconds 60
+python hardware_tests/navigation_field_test.py --seconds 90 --simulate-gps-loss-after 30 --simulate-gps-loss-seconds 5
+```
 
 Gimbal safety is enforced in software: the stepper is clamped to `-180..+180`
 degrees from home so it cannot rotate beyond one full revolution and tangle

@@ -13,6 +13,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
 from core.shared_data import SharedData
+from navigation.navigation_estimator import NavigationEstimator
 from sensors.barometer import create_barometer
 from sensors.gps import create_gps
 from sensors.imu import create_imu
@@ -60,7 +61,9 @@ def _print_dashboard(
     if gps:
         print(
             f"  fix={gps.get('fix_ok')} lat={gps.get('latitude', 0.0):+.6f} "
-            f"lon={gps.get('longitude', 0.0):+.6f} alt={gps.get('altitude', 0.0):.2f}m"
+            f"lon={gps.get('longitude', 0.0):+.6f} alt={gps.get('altitude', 0.0):.2f}m "
+            f"speed={gps.get('ground_speed_mps')}m/s course={gps.get('course_deg')}deg "
+            f"sats={gps.get('satellites')} hdop={gps.get('hdop')}"
         )
     print()
 
@@ -117,6 +120,35 @@ def _print_dashboard(
     print("Telemetry Preview")
     print(f"  {build_telemetry_packet(snap)}")
     print()
+
+    print("Estimated Navigation")
+    print(
+        f"  mode={snap.navigation_mode} valid={snap.navigation_valid} safe_for_guidance={snap.safe_for_guidance} "
+        f"source={snap.position_source}"
+    )
+    print(
+        f"  est lat/lon=({snap.estimated_latitude:+.7f}, {snap.estimated_longitude:+.7f}) "
+        f"N/E=({snap.estimated_north_m:+.2f}, {snap.estimated_east_m:+.2f})m"
+    )
+    print(
+        f"  VN/VE=({snap.estimated_velocity_north_mps:+.2f}, {snap.estimated_velocity_east_mps:+.2f})m/s "
+        f"gs={snap.estimated_ground_speed_mps:.2f}m/s course={snap.estimated_course_deg:.1f}deg "
+        f"heading={snap.estimated_heading_deg:.1f}deg"
+    )
+    print(
+        f"  alt={snap.estimated_altitude_m:.2f}m agl~={snap.estimated_agl_m:.2f}m "
+        f"quality pos/head/alt={snap.position_quality}/{snap.heading_quality}/{snap.altitude_quality}"
+    )
+    print(
+        f"  gps_valid={snap.nav_gps_valid} rejected={snap.nav_gps_rejected} "
+        f"reason={snap.nav_gps_rejection_reason} gps_age={snap.nav_gps_age_ms:.1f}ms "
+        f"gps_error={snap.nav_gps_position_error_m:.2f}m"
+    )
+    print(
+        f"  dead_reckoning={snap.dead_reckoning_active} age={snap.dead_reckoning_age_s:.2f}s "
+        f"recovery={snap.recovery_active}"
+    )
+    print()
     print("Ctrl+C to stop. This dashboard reads sensors only; it does not move servos.")
 
 
@@ -130,6 +162,7 @@ def main() -> int:
     config.USE_MOCK_HARDWARE = False
     mode = args.mode.upper()
     manager = AHRSManager(mode=mode, enabled=mode != "OFF")
+    nav = NavigationEstimator()
     shared = SharedData()
 
     gps = create_gps()
@@ -149,6 +182,12 @@ def main() -> int:
                     latitude=gps_reading.get("latitude", 0.0),
                     longitude=gps_reading.get("longitude", 0.0),
                     gps_altitude=gps_reading.get("altitude", 0.0),
+                    gps_ground_speed_mps=float(gps_reading.get("ground_speed_mps") or 0.0),
+                    gps_course_deg=float(gps_reading.get("course_deg") or 0.0),
+                    gps_satellites=int(gps_reading.get("satellites") or 0),
+                    gps_hdop=float(gps_reading.get("hdop") or 0.0),
+                    gps_fix_type=str(gps_reading.get("fix_type", "NO FIX")),
+                    gps_timestamp_ns=int(gps_reading.get("timestamp_ns") or time.monotonic_ns()),
                     gps_ok=bool(gps_reading.get("fix_ok")),
                 )
 
@@ -156,6 +195,9 @@ def main() -> int:
             if baro_reading:
                 shared.update(
                     baro_altitude=baro_reading.get("altitude", 0.0),
+                    raw_baro_pressure_hpa=baro_reading.get("pressure", 0.0),
+                    raw_baro_temperature_c=baro_reading.get("temperature", 0.0),
+                    baro_timestamp_ns=int(baro_reading.get("timestamp_ns") or time.monotonic_ns()),
                     barometer_ok=True,
                 )
 
@@ -165,6 +207,8 @@ def main() -> int:
                 attitude = manager.update(raw)
                 shared.publish_attitude(attitude)
                 shared.update(imu_ok=True)
+
+            shared.publish_navigation(nav.update(shared.get_snapshot()))
 
             _print_dashboard(
                 elapsed=time.monotonic() - started,

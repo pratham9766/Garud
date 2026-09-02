@@ -31,8 +31,7 @@ from core.shared_data import SharedData
 from core.thread_manager import ManagedThread, ThreadManager
 from gimbal.gimbal_stabilizer import gimbal_worker
 from logging_system.data_logger import DataLogger, logger_worker
-from mapping.kml_generator import generate_kml
-from mapping.map_visualizer import generate_flight_map
+from navigation.navigation_estimator import navigation_worker
 from sensors.barometer import barometer_worker
 from sensors.gps import gps_worker
 from sensors.imu import imu_worker
@@ -85,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mock", action="store_true", help="Use mock hardware.")
     parser.add_argument("--real-hardware", action="store_true", help="Force real hardware mode.")
 
-    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping"):
+    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping", "navigation_estimator"):
         flag = name.replace("_", "-")
         parser.add_argument(f"--enable-{flag}", action="store_true", help=f"Enable {name}.")
         parser.add_argument(f"--disable-{flag}", action="store_true", help=f"Disable {name}.")
@@ -102,7 +101,7 @@ def apply_runtime_overrides(args: argparse.Namespace) -> None:
     if args.test_mode:
         config.PAUSE_STATE_TRANSITIONS = not args.auto_transitions
 
-    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping"):
+    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping", "navigation_estimator"):
         enable = getattr(args, f"enable_{name}")
         disable = getattr(args, f"disable_{name}")
         if enable and disable:
@@ -278,6 +277,9 @@ def generate_outputs(log_path: Path) -> None:
         logger.warning("No log file at %s — skipping map generation.", log_path)
         return
     try:
+        from mapping.kml_generator import generate_kml
+        from mapping.map_visualizer import generate_flight_map
+
         html_path = generate_flight_map(log_path)
         kml_path = generate_kml(log_path)
         logger.info("Maps generated: %s, %s", html_path, kml_path)
@@ -374,6 +376,10 @@ def main() -> None:
     if config.ENABLE_GIMBAL:
         thread_mgr.register(
             ManagedThread("Gimbal", lambda evt: gimbal_worker(shared, evt))
+        )
+    if config.ENABLE_NAVIGATION_ESTIMATOR:
+        thread_mgr.register(
+            ManagedThread("Navigation", lambda evt: navigation_worker(shared, evt))
         )
     if config.ENABLE_TELEMETRY:
         thread_mgr.register(

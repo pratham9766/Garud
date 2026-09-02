@@ -1,5 +1,5 @@
 """
-KML flight-path export using simplekml.
+KML flight-path export.
 
 Reads CSV log and writes data/maps/flight_path.kml.
 """
@@ -9,9 +9,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import pandas as pd
-import simplekml
+
+try:
+    import simplekml
+except ImportError:
+    simplekml = None
 
 import config
 from mapping.coverage import build_image_footprints, estimate_coverage_area
@@ -43,6 +48,8 @@ def generate_kml(
     df = pd.read_csv(csv_path)
     if df.empty:
         raise ValueError(f"CSV log is empty: {csv_path}")
+    if simplekml is None:
+        return _generate_basic_kml(df, output_path)
 
     kml = simplekml.Kml()
     kml.document.name = "Ground Mapping Flight Path"
@@ -104,6 +111,73 @@ def generate_kml(
         kml.save(str(output_path))
     logger.info("KML saved: %s", output_path)
     return output_path
+
+
+def _write_text_with_fallback(output_path: Path, text: str) -> Path:
+    try:
+        output_path.write_text(text, encoding="utf-8")
+    except PermissionError:
+        fallback_name = f"{output_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{output_path.suffix}"
+        output_path = output_path.with_name(fallback_name)
+        output_path.write_text(text, encoding="utf-8")
+    return output_path
+
+
+def _generate_basic_kml(df: pd.DataFrame, output_path: Path) -> Path:
+    footprints = build_image_footprints(df)
+    coverage = estimate_coverage_area(footprints)
+    coords = " ".join(
+        f"{row['longitude']},{row['latitude']},{row.get('baro_altitude', 0)}"
+        for _, row in df.iterrows()
+    )
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<kml xmlns="http://www.opengis.net/kml/2.2">',
+        "<Document>",
+        "<name>Ground Mapping Flight Path</name>",
+        "<description>"
+        + escape(
+            f"Images: {coverage['image_count']}\n"
+            f"Unique coverage estimate: {coverage['unique_area_m2']:.0f} m^2\n"
+            f"Overlap estimate: {coverage['overlap_area_m2']:.0f} m^2\n"
+            f"Coverage grid: {coverage['coverage_grid_m']:.1f} m"
+        )
+        + "</description>",
+        "<Placemark><name>Flight Path</name><LineString><coordinates>",
+        coords,
+        "</coordinates></LineString></Placemark>",
+    ]
+    for footprint in footprints:
+        corners = footprint.corners + [footprint.corners[0]]
+        polygon_coords = " ".join(f"{lon},{lat},0" for lat, lon in corners)
+        parts.extend(
+            [
+                "<Placemark>",
+                f"<name>{escape('Footprint: ' + footprint.image_name)}</name>",
+                "<Polygon><outerBoundaryIs><LinearRing><coordinates>",
+                polygon_coords,
+                "</coordinates></LinearRing></outerBoundaryIs></Polygon>",
+                "</Placemark>",
+            ]
+        )
+    image_rows = df[
+        df["image_name"].notna() & (df["image_name"].astype(str).str.len() > 0)
+    ]
+    for _, row in image_rows.iterrows():
+        parts.extend(
+            [
+                "<Placemark>",
+                f"<name>{escape(str(row['image_name']))}</name>",
+                "<Point><coordinates>"
+                f"{row['longitude']},{row['latitude']},{row.get('baro_altitude', 0)}"
+                "</coordinates></Point>",
+                "</Placemark>",
+            ]
+        )
+    parts.extend(["</Document>", "</kml>"])
+    output = _write_text_with_fallback(output_path, "\n".join(parts))
+    logger.info("KML saved with built-in fallback: %s", output)
+    return output
 
 
 if __name__ == "__main__":

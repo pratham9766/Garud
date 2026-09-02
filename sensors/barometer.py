@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import random
 import threading
 import time
@@ -31,15 +32,17 @@ class MockBarometer(BaseBarometer):
 
     def __init__(self) -> None:
         self._started_at = time.time()
-        self._altitude = 0.0
+        self._altitude = config.MOCK_START_ALTITUDE_M
+        self._read_count = 0
 
     def read(self) -> dict:
+        self._read_count += 1
         elapsed = time.time() - self._started_at
         duration = max(config.SIMULATION_DURATION_SEC, 1.0)
         apogee_time = duration * 0.35
         landed_time = duration
         if elapsed < 2.0:
-            altitude = 0.0
+            altitude = max(0.0, config.MOCK_START_ALTITUDE_M - self._read_count * 0.5)
         elif elapsed < apogee_time:
             climb_fraction = (elapsed - 2.0) / max(apogee_time - 2.0, 1.0)
             altitude = config.TARGET_APOGEE_AGL_M * math.sin(climb_fraction * math.pi / 2.0)
@@ -50,7 +53,7 @@ class MockBarometer(BaseBarometer):
             altitude = 0.0
         self._altitude = max(0.0, altitude + random.uniform(-0.3, 0.3))
         pressure = 1013.25 * (1.0 - self._altitude / 44330.0) ** 5.255
-        return {"altitude": self._altitude, "pressure": pressure}
+        return {"timestamp_ns": time.monotonic_ns(), "altitude": self._altitude, "pressure": pressure}
 
     def close(self) -> None:
         logger.debug("MockBarometer closed.")
@@ -72,6 +75,7 @@ class RealBarometer(BaseBarometer):
     def read(self) -> dict:
         reading = self._sensor.read()
         return {
+            "timestamp_ns": time.monotonic_ns(),
             "altitude": reading["altitude_m"],
             "pressure": reading["pressure_hpa"],
             "temperature": reading["temperature_c"],
@@ -127,6 +131,7 @@ def barometer_worker(shared: SharedData, stop_event: threading.Event) -> None:
                     max_altitude=max(shared.get_snapshot().max_altitude, altitude),
                     raw_baro_pressure_hpa=reading.get("pressure", 0.0),
                     raw_baro_temperature_c=reading.get("temperature", 0.0),
+                    baro_timestamp_ns=int(reading.get("timestamp_ns") or now * 1_000_000_000),
                     barometer_ok=True,
                 )
                 shared.record_worker_success(

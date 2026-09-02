@@ -87,6 +87,7 @@ ENABLE_GIMBAL = True
 ENABLE_TELEMETRY = True
 ENABLE_MAPPING = True
 ENABLE_LOGGING = True
+ENABLE_NAVIGATION_ESTIMATOR = True
 ```
 
 AHRS defaults:
@@ -104,6 +105,8 @@ AHRS_RECOVERY_COUNT_THRESHOLD = 20
 AHRS_MADGWICK_BETA = 0.08
 AHRS_MAHONY_KP = 0.6
 AHRS_MAHONY_KI = 0.02
+NAVIGATION_RATE_HZ = 20.0
+NAV_DEAD_RECKON_MAX_SEC = 5.0
 ```
 
 AHRS modes are `OFF`, `BNO085`, `MADGWICK`, `MAHONY`, and `AUTO`. `BNO085`
@@ -276,8 +279,9 @@ Recommended order:
 10. Test XBee telemetry.
 11. Run the live terminal dashboard and visually check the readings.
 12. Run the browser dashboard and visually check the camera frame.
-13. Run the integrated ground station and save a test report.
-14. Run a short real-hardware field walk.
+13. Run the navigation field test.
+14. Run the integrated ground station and save a test report.
+15. Run a short real-hardware field walk.
 
 Commands:
 
@@ -291,6 +295,7 @@ python hardware_tests/test_ahrs_real.py --mode bno085
 python hardware_tests/live_sensor_dashboard.py --mode bno085
 python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 python hardware_tests/ground_station_dashboard.py --bench --real-hardware --host 0.0.0.0
+python hardware_tests/navigation_field_test.py --seconds 60
 python hardware_tests/test_servo_real.py
 python hardware_tests/test_gimbal_real.py
 python hardware_tests/test_xbee_real.py
@@ -395,7 +400,12 @@ python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 
 Open `http://<raspberry-pi-ip>:8080` from a laptop or the Pi browser. The page
 shows live GPS, barometer, raw IMU, AHRS, telemetry preview, and latest captured
-camera frame.
+camera frame. Both dashboards also show estimated navigation position, N/E
+frame coordinates, VN/VE velocity, ground speed, course, AHRS heading, GPS
+rejection reason, dead-reckoning age, recovery state, and `safe_for_guidance`.
+
+See `docs/navigation_estimator.md` for estimator architecture, failsafe states,
+configuration defaults, validation status, and flight recommendation.
 
 For an integrated temporary ground-station dashboard with graphs and state
 controls:

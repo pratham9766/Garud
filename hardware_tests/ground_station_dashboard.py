@@ -37,6 +37,7 @@ from core.system_health import system_health_worker
 from core.thread_manager import ManagedThread, ThreadManager
 from gimbal.gimbal_stabilizer import gimbal_worker
 from logging_system.data_logger import DataLogger, logger_worker
+from navigation.navigation_estimator import navigation_worker
 from sensors.barometer import barometer_worker
 from sensors.gps import gps_worker
 from sensors.imu import imu_worker
@@ -86,7 +87,7 @@ button:hover { background: #2b3543; }
 .tabs { display: flex; gap: 6px; padding: 8px 12px 0; flex-wrap: wrap; }
 .tab.active { background: #334155; border-color: #607089; }
 .view { display: none; }
-.view.active { display: block; grid-column: 1 / -1; }
+.view.active { display: block; }
 .pill {
   border: 1px solid #394556;
   border-radius: 999px;
@@ -233,6 +234,10 @@ th { color: #98a6b8; font-weight: 650; }
     <div class="card wide" style="margin-top:10px">
       <div class="label">GPS</div>
       <div class="small" id="gps">--</div>
+    </div>
+    <div class="card wide" style="margin-top:10px">
+      <div class="label">Estimated Navigation</div>
+      <div class="small" id="navigation">--</div>
     </div>
     <div class="card wide" style="margin-top:10px">
       <div class="label">Raw IMU</div>
@@ -514,7 +519,8 @@ async function refresh() {
   document.getElementById("yaw").textContent = fmt(s.yaw, 2, " deg");
   document.getElementById("gimbal").textContent = `stepper ${fmt(s.gimbal.stepper, 1, " deg")} | servo cmd ${fmt(s.gimbal.servo, 1, " deg")} | steps ${s.gimbal.steps}`;
   const gpsDetails = s.health.gps.details || {};
-  document.getElementById("gps").textContent = `${gpsDetails.fix_type || "N/A"} | sats ${gpsDetails.satellites ?? "N/A"} | HDOP ${gpsDetails.hdop ?? "N/A"} | lat ${fmt(s.latitude, 6)} | lon ${fmt(s.longitude, 6)} | GPS MSL ${fmt(s.gps_altitude, 1, " m")}`;
+  document.getElementById("gps").textContent = `${s.gps.fix_type || gpsDetails.fix_type || "N/A"} | sats ${s.gps.satellites ?? gpsDetails.satellites ?? "N/A"} | HDOP ${s.gps.hdop ?? gpsDetails.hdop ?? "N/A"} | lat ${fmt(s.latitude, 6)} | lon ${fmt(s.longitude, 6)} | GPS MSL ${fmt(s.gps_altitude, 1, " m")} | speed ${fmt(s.gps.speed_mps, 1, " m/s")} | course ${fmt(s.gps.course_deg, 1, " deg")} | age ${fmt(s.navigation.gps_age_ms, 0, " ms")}`;
+  document.getElementById("navigation").textContent = `${s.navigation.mode} | pos ${s.navigation.position_quality} | head ${s.navigation.heading_quality} | alt ${s.navigation.altitude_quality} | est ${fmt(s.navigation.latitude, 6)}, ${fmt(s.navigation.longitude, 6)} | N/E ${fmt(s.navigation.north_m, 1, " m")}, ${fmt(s.navigation.east_m, 1, " m")} | VN/VE ${fmt(s.navigation.vn_mps, 1, " m/s")}, ${fmt(s.navigation.ve_mps, 1, " m/s")} | gs ${fmt(s.navigation.ground_speed_mps, 1, " m/s")} | course ${fmt(s.navigation.course_deg, 1, " deg")} | heading ${fmt(s.navigation.heading_deg, 1, " deg")} | alt ${fmt(s.navigation.altitude_m, 1, " m")} | GPS error ${fmt(s.navigation.gps_position_error_m, 1, " m")} | rejected ${s.navigation.gps_rejected} ${s.navigation.gps_rejection_reason} | DR ${s.navigation.dead_reckoning_active} ${fmt(s.navigation.dead_reckoning_age_s, 1, " s")} | recovery ${s.navigation.recovery_active} | safe ${s.navigation.safe_for_guidance}`;
   document.getElementById("raw").textContent = `gyro ${s.raw.gyro.map(v => fmt(v, 3)).join(", ")} | accel ${s.raw.accel.map(v => fmt(v, 2)).join(", ")} | mag ${s.raw.mag.map(v => fmt(v, 2)).join(", ")}`;
   document.getElementById("packet").textContent = s.telemetry;
   document.getElementById("packet2").textContent = s.telemetry;
@@ -532,6 +538,7 @@ async function refresh() {
     pill("BARO", s.health.barometer),
     pill("CAM", s.health.camera),
     pill("GIMBAL", s.health.gimbal),
+    pill("NAV", s.health.navigation),
     pill("TELEM", s.health.telemetry),
     pill("LOG", s.health.logging),
     pill("SYS", s.health.system)
@@ -678,6 +685,10 @@ def start_workers(shared: SharedData, thread_mgr: ThreadManager, data_logger: Da
         thread_mgr.register(ManagedThread("Gimbal", lambda evt: gimbal_worker(shared, evt)))
     else:
         shared.set_worker_disabled("Gimbal")
+    if config.ENABLE_NAVIGATION_ESTIMATOR:
+        thread_mgr.register(ManagedThread("Navigation", lambda evt: navigation_worker(shared, evt)))
+    else:
+        shared.set_worker_disabled("Navigation")
     if config.ENABLE_TELEMETRY:
         thread_mgr.register(ManagedThread("Telemetry", lambda evt: telemetry_worker(shared, evt)))
     else:
@@ -939,6 +950,7 @@ def dashboard_snapshot(
             "barometer": worker_status("Barometer", snap.barometer_ok),
             "camera": worker_status("Camera", snap.camera_ok),
             "gimbal": worker_status("Gimbal", snap.gimbal_ok),
+            "navigation": worker_status("Navigation", snap.navigation_valid),
             "telemetry": worker_status("Telemetry", snap.telemetry_ok),
             "logging": worker_status("DataLogger", bool(data_logger)),
             "system": worker_status("System", True),
@@ -947,6 +959,43 @@ def dashboard_snapshot(
             "gyro": [snap.raw_gyro_x, snap.raw_gyro_y, snap.raw_gyro_z],
             "accel": [snap.raw_accel_x, snap.raw_accel_y, snap.raw_accel_z],
             "mag": [snap.raw_mag_x, snap.raw_mag_y, snap.raw_mag_z],
+        },
+        "gps": {
+            "fix": snap.gps_ok,
+            "fix_type": snap.gps_fix_type,
+            "satellites": snap.gps_satellites,
+            "hdop": snap.gps_hdop,
+            "speed_mps": snap.gps_ground_speed_mps,
+            "course_deg": snap.gps_course_deg,
+            "timestamp_ns": snap.gps_timestamp_ns,
+        },
+        "navigation": {
+            "mode": snap.navigation_mode,
+            "position_quality": snap.position_quality,
+            "heading_quality": snap.heading_quality,
+            "altitude_quality": snap.altitude_quality,
+            "position_source": snap.position_source,
+            "latitude": snap.estimated_latitude,
+            "longitude": snap.estimated_longitude,
+            "north_m": snap.estimated_north_m,
+            "east_m": snap.estimated_east_m,
+            "altitude_m": snap.estimated_altitude_m,
+            "agl_m": snap.estimated_agl_m,
+            "vn_mps": snap.estimated_velocity_north_mps,
+            "ve_mps": snap.estimated_velocity_east_mps,
+            "ground_speed_mps": snap.estimated_ground_speed_mps,
+            "course_deg": snap.estimated_course_deg,
+            "heading_deg": snap.estimated_heading_deg,
+            "gps_valid": snap.nav_gps_valid,
+            "gps_rejected": snap.nav_gps_rejected,
+            "gps_rejection_reason": snap.nav_gps_rejection_reason,
+            "gps_age_ms": snap.nav_gps_age_ms,
+            "gps_position_error_m": snap.nav_gps_position_error_m,
+            "dead_reckoning_active": snap.dead_reckoning_active,
+            "dead_reckoning_age_s": snap.dead_reckoning_age_s,
+            "recovery_active": snap.recovery_active,
+            "navigation_valid": snap.navigation_valid,
+            "safe_for_guidance": snap.safe_for_guidance,
         },
         "gimbal": {
             "x": snap.gimbal_x_deflection_deg,
@@ -1028,6 +1077,15 @@ def config_snapshot() -> dict[str, Any]:
         "TELEMETRY_EXPECTED_HZ",
         "LOGGER_EXPECTED_HZ",
         "GPS_HDOP_DEGRADED",
+        "ENABLE_NAVIGATION_ESTIMATOR",
+        "NAVIGATION_RATE_HZ",
+        "NAV_MIN_SATELLITES",
+        "NAV_MAX_HDOP",
+        "NAV_MAX_GPS_AGE_MS",
+        "NAV_MAX_PLAUSIBLE_SPEED_MPS",
+        "NAV_MAX_ABSOLUTE_GPS_JUMP_M",
+        "NAV_DEAD_RECKON_MAX_SEC",
+        "NAV_GPS_GOOD_COUNT_TO_RECOVER",
         "IMAGE_SYNC_WARN_MS",
         "POWER_UNDERVOLTAGE_WARN_V",
     ]
@@ -1181,7 +1239,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--allow-manual-state", action="store_true", help="Allow browser state mutation outside mock mode.")
     parser.add_argument("--auto-transitions", action="store_true", help="Start with live sensor-driven transitions enabled.")
     parser.add_argument("--duration", type=float, default=0.0, help="Optional run duration in seconds; 0 runs until Ctrl+C.")
-    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging"):
+    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "navigation_estimator"):
         flag = name.replace("_", "-")
         parser.add_argument(f"--enable-{flag}", action="store_true")
         parser.add_argument(f"--disable-{flag}", action="store_true")
@@ -1196,7 +1254,7 @@ def apply_overrides(args: argparse.Namespace) -> None:
     if args.real_hardware or args.bench:
         config.USE_MOCK_HARDWARE = False
     config.PAUSE_STATE_TRANSITIONS = True
-    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging"):
+    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "navigation_estimator"):
         enable = getattr(args, f"enable_{name}")
         disable = getattr(args, f"disable_{name}")
         if enable and disable:
