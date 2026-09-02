@@ -87,7 +87,7 @@ button:hover { background: #2b3543; }
 .tabs { display: flex; gap: 6px; padding: 8px 12px 0; flex-wrap: wrap; }
 .tab.active { background: #334155; border-color: #607089; }
 .view { display: none; }
-.view.active { display: block; }
+.view.active { display: block; grid-column: 1 / -1; }
 .pill {
   border: 1px solid #394556;
   border-radius: 999px;
@@ -113,6 +113,27 @@ section {
   padding: 12px;
   min-width: 0;
 }
+.mission-grid {
+  display: grid;
+  grid-template-columns: minmax(520px, 1.15fr) minmax(340px, .85fr);
+  gap: 10px;
+}
+.mission-side {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.compact-list {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+.compact-item {
+  border-bottom: 1px solid #2d3440;
+  padding-bottom: 6px;
+}
+.compact-item:last-child { border-bottom: 0; padding-bottom: 0; }
 .cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -165,6 +186,7 @@ th { color: #98a6b8; font-weight: 650; }
 @media (max-width: 1050px) {
   main { grid-template-columns: 1fr; }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mission-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
   header { align-items: flex-start; flex-direction: column; }
@@ -179,17 +201,10 @@ th { color: #98a6b8; font-weight: 650; }
     <h1>GARUDA Ground Station</h1>
     <div class="topline">
       <span class="pill" id="mode">mode --</span>
-      <span class="pill" id="state">state --</span>
+      <span class="pill" id="state">Current State --</span>
       <span class="pill" id="auto">auto --</span>
       <span class="pill" id="log">log --</span>
     </div>
-  </div>
-  <div class="controls">
-    <select id="stateSelect"></select>
-    <button id="setStateBtn" onclick="setState()">Set State</button>
-    <button id="nextBtn" onclick="nextState()">Next</button>
-    <button onclick="setAuto(true)">Auto On</button>
-    <button onclick="setAuto(false)">Auto Off</button>
   </div>
 </header>
 <nav class="tabs">
@@ -202,23 +217,38 @@ th { color: #98a6b8; font-weight: 650; }
 </nav>
 <main>
   <section class="view active" id="missionView">
-    <div class="cards">
-      <div class="card"><div class="label">Mission Time</div><div class="value" id="time">--</div></div>
-      <div class="card"><div class="label">Baro Altitude</div><div class="value" id="baro">--</div></div>
-      <div class="card"><div class="label">Vertical Rate</div><div class="value" id="vz">--</div></div>
-      <div class="card"><div class="label">Max Altitude</div><div class="value" id="maxAlt">--</div></div>
-      <div class="card"><div class="label">Roll</div><div class="value" id="roll">--</div></div>
-      <div class="card"><div class="label">Pitch</div><div class="value" id="pitch">--</div></div>
-      <div class="card"><div class="label">Yaw</div><div class="value" id="yaw">--</div></div>
-      <div class="card"><div class="label">Gimbal</div><div class="small" id="gimbal">--</div></div>
-      <div class="card wide"><div class="label">Subsystem Health</div><div class="status-row" id="health"></div></div>
-      <div class="card wide"><div class="label">Verification Summary</div><div class="status-row" id="verificationSummary"></div></div>
-    </div>
-    <div class="charts">
-      <canvas id="altChart" width="520" height="180"></canvas>
-      <canvas id="attChart" width="520" height="180"></canvas>
-      <canvas id="rateChart" width="520" height="180"></canvas>
-      <canvas id="gimbalChart" width="520" height="180"></canvas>
+    <div class="mission-grid">
+      <div>
+        <div class="cards">
+          <div class="card"><div class="label">Current State</div><div class="value" id="currentState">--</div></div>
+          <div class="card"><div class="label">Previous State</div><div class="value" id="previousState">--</div></div>
+          <div class="card"><div class="label">Time in State</div><div class="value" id="timeInState">--</div></div>
+          <div class="card"><div class="label">Mission Time</div><div class="value" id="time">--</div></div>
+          <div class="card"><div class="label">Baro AGL</div><div class="value" id="baro">--</div></div>
+          <div class="card"><div class="label">Baro Raw / Filtered</div><div class="small" id="baroDetail">--</div></div>
+          <div class="card"><div class="label">GPS Altitude</div><div class="value" id="gpsAlt">--</div></div>
+          <div class="card"><div class="label">Max AGL</div><div class="value" id="maxAlt">--</div></div>
+          <div class="card"><div class="label">Vertical Rate</div><div class="value" id="vz">--</div></div>
+          <div class="card"><div class="label">Roll</div><div class="value" id="roll">--</div></div>
+          <div class="card"><div class="label">Pitch</div><div class="value" id="pitch">--</div></div>
+          <div class="card"><div class="label">Yaw</div><div class="value" id="yaw">--</div></div>
+          <div class="card wide"><div class="label">Transition Reason</div><div class="small" id="transitionReason">--</div></div>
+          <div class="card wide"><div class="label">Subsystem Health</div><div class="status-row" id="health"></div></div>
+          <div class="card wide"><div class="label">Verification Summary</div><div class="status-row" id="verificationSummary"></div></div>
+        </div>
+        <div class="charts">
+          <canvas id="altChart" width="520" height="180"></canvas>
+          <canvas id="attChart" width="520" height="180"></canvas>
+          <canvas id="rateChart" width="520" height="180"></canvas>
+          <canvas id="gimbalChart" width="520" height="180"></canvas>
+        </div>
+      </div>
+      <div class="mission-side">
+        <div class="card"><div class="label">Active Warnings / Faults</div><div class="compact-list small" id="activeWarnings">--</div></div>
+        <div class="card"><div class="label">Recent Mission Events</div><div class="compact-list small" id="missionEvents">--</div></div>
+        <div class="card"><div class="label">State Transition History</div><div class="compact-list small" id="missionStateHistory">--</div></div>
+        <div class="card"><div class="label">Worker Heartbeat</div><div class="compact-list small" id="missionWorkers">--</div></div>
+      </div>
     </div>
   </section>
   <section class="view" id="payloadView">
@@ -296,6 +326,7 @@ th { color: #98a6b8; font-weight: 650; }
   </section>
   <section class="view" id="testView">
     <div class="cards">
+      <div class="card wide"><div class="label">Manual FSM Override</div><div class="controls"><span class="pill" id="manualLock">manual --</span><select id="stateSelect"></select><button id="setStateBtn" onclick="setState()">Set State</button><button id="nextBtn" onclick="nextState()">Next</button><button id="autoOnBtn" onclick="setAuto(true)">Auto On</button><button id="autoOffBtn" onclick="setAuto(false)">Auto Off</button></div></div>
       <div class="card wide"><div class="label">Test Recording</div><div class="controls"><button onclick="testAction('start')">Start Test</button><button onclick="testAction('stop')">Stop Test</button><button onclick="testAction('reset')">Reset Test</button><span class="pill" id="testStatus">test --</span></div></div>
       <div class="card wide"><div class="label">Mock Fault Injection</div><div class="controls" id="faultControls"></div></div>
     </div>
@@ -319,7 +350,18 @@ function fmt(n, d=1, suffix="") {
   return Number.isFinite(n) ? n.toFixed(d) + suffix : "--";
 }
 
+function displayMode(mode) {
+  if (mode === "MOCK") return "SIMULATION / MOCK";
+  return mode || "--";
+}
+
+function displayStatus(status) {
+  if (status === "ERROR" || status === "STALE") return "FAILED";
+  return status || "INITIALIZING";
+}
+
 function statusClass(status) {
+  status = displayStatus(status);
   if (status === "HEALTHY") return "ok";
   if (status === "DEGRADED" || status === "INITIALIZING") return "amber";
   if (status === "DISABLED") return "gray";
@@ -328,10 +370,11 @@ function statusClass(status) {
 
 function pill(name, health) {
   const span = document.createElement("span");
-  const status = health.status || "INITIALIZING";
+  const status = displayStatus(health.status);
+  const reason = health.reason || "No reason reported.";
   span.className = "pill " + statusClass(status);
-  span.title = health.reason || "";
-  span.textContent = name + " " + status;
+  span.title = reason;
+  span.textContent = `${name} ${status} - ${reason}`;
   return span;
 }
 
@@ -375,13 +418,18 @@ function drawChart(id, title, series, markers=[]) {
     ctx.strokeStyle = colors[idx % colors.length];
     ctx.lineWidth = 2;
     ctx.beginPath();
+    let started = false;
     s.values.forEach((value, i) => {
+      if (!Number.isFinite(value)) return;
       const x = (i / Math.max(1, maxPoints - 1)) * w;
       const y = h - ((value - min) / (max - min)) * h;
-      if (i === 0) ctx.moveTo(x, y);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      }
       else ctx.lineTo(x, y);
     });
-    ctx.stroke();
+    if (started) ctx.stroke();
     ctx.fillStyle = colors[idx % colors.length];
     ctx.fillText(s.name, w - 92, 18 + idx * 16);
   });
@@ -501,17 +549,72 @@ function renderVerificationSummary(summary) {
   });
 }
 
+function renderCompactList(id, items, emptyText) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  target.replaceChildren();
+  if (!items.length) {
+    target.textContent = emptyText;
+    return;
+  }
+  items.forEach(text => {
+    const div = document.createElement("div");
+    div.className = "compact-item";
+    div.textContent = text;
+    target.appendChild(div);
+  });
+}
+
+function renderMissionSide(s) {
+  const warnings = [];
+  Object.values(s.health || {}).forEach(w => {
+    const status = displayStatus(w.status);
+    if (status === "DEGRADED" || status === "FAILED") warnings.push(`${w.name} ${status} - ${w.reason || "No reason reported."}`);
+  });
+  Object.entries(s.diagnostics.faults || {}).forEach(([name, enabled]) => {
+    if (enabled) warnings.push(`FAULT INJECTED - ${name}`);
+  });
+  Object.entries((s.verification || {}).categories || {}).forEach(([name, item]) => {
+    if (item.status === "WARN" || item.status === "FAIL") warnings.push(`${name} ${item.status} - ${(item.reasons || []).join(" | ")}`);
+  });
+  renderCompactList("activeWarnings", warnings.slice(0, 8), "No active warnings or faults.");
+
+  const events = (s.diagnostics.events || []).slice(-6).reverse().map(e => `${fmt(e.mission_time, 2, " s")} ${e.severity} ${e.source}: ${e.message}`);
+  renderCompactList("missionEvents", events, "No mission events recorded.");
+
+  const states = (s.diagnostics.state_history || []).slice(-6).reverse().map(e => `${fmt(e.mission_time, 2, " s")} ${e.from} -> ${e.to} (${e.reason})`);
+  renderCompactList("missionStateHistory", states, "No state transitions recorded.");
+
+  const workers = Object.values(s.diagnostics.workers || {}).slice(0, 10).map(w => {
+    const age = w.data_age_ms === null ? "N/A" : fmt(w.data_age_ms, 0, " ms");
+    return `${w.name}: ${displayStatus(w.status)} | ${fmt(w.actual_hz, 1, " Hz")}/${fmt(w.expected_hz, 1, " Hz")} | age ${age} | err ${w.error_count}`;
+  });
+  renderCompactList("missionWorkers", workers, "No worker heartbeat yet.");
+}
+
+function chartMarkers(s) {
+  const eventMarkers = (s.diagnostics.events || []).map(e => ({mission_time: e.mission_time, severity: e.severity}));
+  const stateMarkers = (s.diagnostics.state_history || []).map(e => ({mission_time: e.mission_time, severity: "STATE"}));
+  return eventMarkers.concat(stateMarkers);
+}
+
 async function refresh() {
   const res = await fetch("/api/state", {cache: "no-store"});
   const s = await res.json();
   initFaultControls();
   updateStateList(s.states);
-  document.getElementById("mode").textContent = s.mode;
-  document.getElementById("state").textContent = `state ${s.state} (${fmt(s.time_in_state, 1, " s")})`;
+  document.getElementById("mode").textContent = displayMode(s.mode);
+  document.getElementById("state").textContent = `Current State ${s.state}`;
   document.getElementById("auto").textContent = "auto " + (s.auto_transitions ? "ON" : "OFF");
   document.getElementById("log").textContent = s.log_path ? "log " + s.log_path.split(/[\\/]/).pop() : "log off";
+  document.getElementById("currentState").textContent = s.state;
+  document.getElementById("previousState").textContent = s.previous_state || "N/A";
+  document.getElementById("timeInState").textContent = fmt(s.time_in_state, 1, " s");
+  document.getElementById("transitionReason").textContent = s.transition_reason || "No transition reason recorded.";
   document.getElementById("time").textContent = fmt(s.mission_time, 1, " s");
-  document.getElementById("baro").textContent = fmt(s.baro_altitude, 1, " m");
+  document.getElementById("baro").textContent = fmt(s.baro.agl_m, 1, " m");
+  document.getElementById("baroDetail").textContent = `raw ${fmt(s.baro.raw_agl_m, 1, " m")} | filtered ${fmt(s.baro.filtered_agl_m, 1, " m")} | pressure ${fmt(s.baro.pressure_hpa, 2, " hPa")} | temp ${fmt(s.baro.temperature_c, 1, " C")}`;
+  document.getElementById("gpsAlt").textContent = fmt(s.gps_altitude, 1, " m");
   document.getElementById("vz").textContent = fmt(s.vertical_velocity, 2, " m/s");
   document.getElementById("maxAlt").textContent = fmt(s.max_altitude, 1, " m");
   document.getElementById("roll").textContent = fmt(s.roll, 2, " deg");
@@ -532,6 +635,10 @@ async function refresh() {
   const health = document.getElementById("health");
   document.getElementById("setStateBtn").disabled = !s.manual_state_allowed;
   document.getElementById("nextBtn").disabled = !s.manual_state_allowed;
+  document.getElementById("manualLock").textContent = s.manual_state_allowed ? "manual override ENABLED" : "manual override LOCKED";
+  document.getElementById("manualLock").className = "pill " + (s.manual_state_allowed ? "amber" : "gray");
+  const select = document.getElementById("stateSelect");
+  if (select && select.value !== s.state) select.value = s.state;
   health.replaceChildren(
     pill("GPS", s.health.gps),
     pill("IMU", s.health.imu),
@@ -544,6 +651,7 @@ async function refresh() {
     pill("SYS", s.health.system)
   );
   renderVerificationSummary(s.verification || {});
+  renderMissionSide(s);
   renderWorkerTable(s.diagnostics.workers);
   renderStateHistory(s.diagnostics.state_history);
   renderEvents(s.diagnostics.events);
@@ -575,25 +683,33 @@ async function refresh() {
     while (arr.length < maxPoints) arr.unshift(NaN);
     return arr;
   };
+  const markers = chartMarkers(s);
   drawChart("altChart", "Altitude", [
-    {name: "baro", values: vals(x => x.baro_altitude)},
+    {name: "baro raw", values: vals(x => x.baro.raw_agl_m)},
+    {name: "baro filt", values: vals(x => x.baro.filtered_agl_m)},
     {name: "gps", values: vals(x => x.gps_altitude)}
-  ], s.diagnostics.events || []);
+  ], markers);
   drawChart("attChart", "Attitude", [
     {name: "roll", values: vals(x => x.roll)},
     {name: "pitch", values: vals(x => x.pitch)},
     {name: "yaw", values: vals(x => x.yaw)}
-  ], s.diagnostics.events || []);
+  ], markers);
   drawChart("rateChart", "Rates", [
     {name: "vz", values: vals(x => x.vertical_velocity)},
     {name: "gx", values: vals(x => x.raw.gyro[0])},
     {name: "gy", values: vals(x => x.raw.gyro[1])},
     {name: "gz", values: vals(x => x.raw.gyro[2])}
-  ], s.diagnostics.events || []);
-  drawChart("gimbalChart", "Gimbal", [
-    {name: "stepper", values: vals(x => x.gimbal.stepper)},
-    {name: "servo", values: vals(x => x.gimbal.servo)}
-  ], s.diagnostics.events || []);
+  ], markers);
+  const gimbalChart = document.getElementById("gimbalChart");
+  if (displayStatus(s.health.gimbal.status) === "DISABLED") {
+    gimbalChart.style.display = "none";
+  } else {
+    gimbalChart.style.display = "block";
+    drawChart("gimbalChart", "Gimbal", [
+      {name: "stepper", values: vals(x => x.gimbal.stepper)},
+      {name: "servo", values: vals(x => x.gimbal.servo)}
+    ], markers);
+  }
 }
 refresh();
 setInterval(refresh, 500);

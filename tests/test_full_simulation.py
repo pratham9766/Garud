@@ -24,6 +24,7 @@ from gimbal.gimbal_stabilizer import gimbal_worker
 from logging_system.data_logger import DataLogger, logger_worker
 from mapping.kml_generator import generate_kml
 from mapping.map_visualizer import generate_flight_map
+from navigation.navigation_estimator import navigation_worker
 from sensors.barometer import barometer_worker
 from sensors.gps import gps_worker
 from sensors.imu import imu_worker
@@ -59,6 +60,7 @@ def run_full_simulation() -> None:
     thread_mgr.register(ManagedThread("Barometer", lambda e: barometer_worker(shared, e)))
     thread_mgr.register(ManagedThread("Camera", lambda e: camera_worker(shared, e)))
     thread_mgr.register(ManagedThread("Gimbal", lambda e: gimbal_worker(shared, e)))
+    thread_mgr.register(ManagedThread("Navigation", lambda e: navigation_worker(shared, e)))
     thread_mgr.register(ManagedThread("Telemetry", lambda e: telemetry_worker(shared, e)))
     thread_mgr.register(
         ManagedThread("DataLogger", lambda e: logger_worker(shared, data_logger, e))
@@ -104,6 +106,8 @@ def run_full_simulation() -> None:
 
     snap = shared.get_snapshot()
     assert snap.gps_ok or snap.latitude != 0, "GPS data missing"
+    assert snap.navigation_mode in {"GOOD", "DEGRADED", "RECOVERING"}, "Navigation estimator did not initialize"
+    assert snap.estimated_latitude != 0.0 and snap.estimated_longitude != 0.0, "Estimated navigation position missing"
     assert data_logger.path.exists(), "CSV log missing"
     assert html_path.exists(), "HTML map missing"
     assert kml_path.exists(), "KML missing"
