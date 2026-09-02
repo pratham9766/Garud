@@ -4,22 +4,6 @@ import sys
 import os
 import hashlib
 import logging
-
-# Ensure the module can be run from root
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
-
-from estimation.madgwick import MadgwickFilter
-from estimation.ekf_altitude import EKFAltitude
-from guidance.heading_pid import HeadingPID
-from state_machine.flight_states import StateMachine, FlightState
-from state_machine.state_persistence import (
-    StateSnapshot, STATE_WRITE_INTERVAL_S,
-    write_state, load_state, delete_state,
-)
-from sim.dynamics import GliderDynamics
-from sim.wind_model import WindModel
-from hw_interface.simulated_hardware import SimulatedHardware
-from estimation.wind_estimator import WindEstimatorRLS
 import yaml
 import numpy as np
 
@@ -78,6 +62,56 @@ class DummyTelemetry:
 
 
 # ---------------------------------------------------------------------------
+# SharedData Integration (Garuda_TARSR Mode)
+# ---------------------------------------------------------------------------
+class SharedIMU:
+    def __init__(self, shared):
+        self.shared = shared
+
+    def read(self):
+        snap = self.shared.get_snapshot()
+        return (snap.raw_accel_x, snap.raw_accel_y, snap.raw_accel_z,
+                snap.raw_gyro_x, snap.raw_gyro_y, snap.raw_gyro_z,
+                snap.raw_mag_x, snap.raw_mag_y, snap.raw_mag_z)
+
+    def read_attitude(self):
+        # We rely on gnc_worker's EKF/Madgwick, so this can return 0s if needed, 
+        # or we could return the already fused AHRS data. 
+        # gnc_worker.py calculates its own attitude.
+        snap = self.shared.get_snapshot()
+        return snap.roll, snap.pitch, snap.yaw, snap.raw_gyro_z
+
+
+class SharedBaro:
+    def __init__(self, shared):
+        self.shared = shared
+
+    def read_altitude(self):
+        return self.shared.get_snapshot().baro_altitude
+
+
+class SharedGPS:
+    def __init__(self, shared):
+        self.shared = shared
+
+    def read(self):
+        snap = self.shared.get_snapshot()
+        return (snap.latitude, snap.longitude, snap.gps_altitude,
+                snap.gps_ground_speed_mps, snap.gps_course_deg)
+
+
+class SharedServos:
+    def __init__(self, shared):
+        self.shared = shared
+
+    def write(self, left, right):
+        self.shared.update(
+            servo_left=left,
+            servo_right=right,
+        )
+
+
+# ---------------------------------------------------------------------------
 # FlightComputer
 # ---------------------------------------------------------------------------
 class FlightComputer:
@@ -87,14 +121,62 @@ class FlightComputer:
     DELTA_S_MIN =   0.0
     DELTA_S_MAX =  30.0
 
-    def __init__(self, use_simulator=True):
+    def __init__(self, shared=None, use_simulator=True, drop_height: float = 0.0):
         log.info("Initializing Flight Computer...")
 
+        # --- Resolve glider_gnc module path (lazy, to avoid package name collisions) ---
+        _here = os.path.abspath(os.path.dirname(__file__))
+        _gnc_root = os.path.abspath(os.path.join(_here, '..', '..', 'System001', 'glider_gnc'))
+        if os.path.isdir(_gnc_root) and _gnc_root not in sys.path:
+            sys.path.insert(0, _gnc_root)
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+
+        from estimation.madgwick import MadgwickFilter as _MadgwickFilter
+        from estimation.ekf_altitude import EKFAltitude as _EKFAltitude
+        from guidance.heading_pid import HeadingPID as _HeadingPID
+        from state_machine.flight_states import StateMachine as _StateMachine, FlightState as _FlightState
+        from state_machine.state_persistence import (
+            StateSnapshot, STATE_WRITE_INTERVAL_S,
+            write_state, load_state, delete_state,
+        )
+        from estimation.wind_estimator import WindEstimatorRLS as _WindEstimatorRLS
+
+        # Store references so the rest of the class can use them
+        self._MadgwickFilter = _MadgwickFilter
+        self._EKFAltitude = _EKFAltitude
+        self._HeadingPID = _HeadingPID
+        self._StateMachine = _StateMachine
+        self.FlightState = _FlightState
+        self._STATE_WRITE_INTERVAL_S = STATE_WRITE_INTERVAL_S
+        self._write_state = write_state
+        self._load_state = load_state
+        self._delete_state = delete_state
+        self._WindEstimatorRLS = _WindEstimatorRLS
+
+        self.shared = shared
         self.dt = 0.05  # 20 Hz loop
         self.use_simulator = use_simulator
 
         if self.use_simulator:
             log.info("--> Software-In-The-Loop (SITL) Mode ACTIVE")
+            from sim.dynamics import GliderDynamics
+            from sim.wind_model import WindModel
+        if self.shared is not None:
+            # ---------------------------------------------------------------
+            # Garuda_TARSR INTEGRATED mode — hardware is managed by the
+            # sensor worker threads; we just read from SharedData.
+            # ---------------------------------------------------------------
+            log.info("--> INTEGRATED (SharedData) Mode ACTIVE")
+            self.imu    = SharedIMU(self.shared)
+            self.baro   = SharedBaro(self.shared)
+            self.gps    = SharedGPS(self.shared)
+            self.servos = SharedServos(self.shared)
+        elif self.use_simulator:
+            log.info("--> Software-In-The-Loop (SITL) Mode ACTIVE")
+            from sim.dynamics import GliderDynamics
+            from sim.wind_model import WindModel
+            from hw_interface.simulated_hardware import SimulatedHardware
             self.sim_dynamics = GliderDynamics(-1000.0, -1000.0, 0.0, math.radians(45))
             self.sim_wind = WindModel(2.0, math.radians(90))
             self.sim_hw = SimulatedHardware(self.sim_dynamics)
@@ -176,24 +258,30 @@ class FlightComputer:
 
         # Read mission target from config and convert to our 1e-5 projection
         # Edit config/gains.yaml section 14 on launch day -- no code change needed.
-        with open("config/gains.yaml", "r") as _f:
+        _gains_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "gains.yaml")
+        if not os.path.exists(_gains_path):
+            _gains_path = "config/gains.yaml"  # fallback for standalone run
+        with open(_gains_path, "r") as _f:
             _cfg = yaml.safe_load(_f)
         mission_cfg = _cfg.get('mission', {})
-        target_lat  = mission_cfg.get('target_latitude',  18.5204)
-        target_lon  = mission_cfg.get('target_longitude', 73.8567)
+        target_lat  = mission_cfg.get('target_latitude',  18.653862)
+        target_lon  = mission_cfg.get('target_longitude', 73.762826)
         self.target_x = target_lat / 1e-5
         self.target_y = target_lon / 1e-5
         log.info("[MISSION] Target: lat=%.6f lon=%.6f (x=%.0f y=%.0f)",
                  target_lat, target_lon, self.target_x, self.target_y)
 
-        self.att_filter     = MadgwickFilter(beta=0.1)
+        self.att_filter     = self._MadgwickFilter(beta=0.1)
         _ground_alt         = self.baro.read_altitude()   # read ONCE — shared reference
-        self.ekf_alt        = EKFAltitude(self.dt, initial_alt=_ground_alt)
-        self.heading_pid    = HeadingPID(kp=10.0, ki=0.1, kd=1.0, output_limit=30.0)
-        self.state_machine  = StateMachine(ground_altitude=_ground_alt)
-        self.wind_estimator = WindEstimatorRLS()
+        self.ekf_alt        = self._EKFAltitude(self.dt, initial_alt=_ground_alt)
+        self.heading_pid    = self._HeadingPID(kp=10.0, ki=0.1, kd=1.0, output_limit=30.0)
+        self.state_machine  = self._StateMachine(ground_altitude=_ground_alt - drop_height)
+        self.wind_estimator = self._WindEstimatorRLS()
         self.prev_delta_a   = 0.0
         self.prev_delta_s   = 0.0
+
+        if drop_height > 0.0:
+            log.info("[DROP-TEST] Ground altitude offset by -%.1f m (true AGL baseline corrected)", drop_height)
 
         self._last_gps_time   = time.time()
         self._last_state_write = time.time()   # throttle .state writes
@@ -363,11 +451,11 @@ class FlightComputer:
             raise RuntimeError(f"Inference timeout: {elapsed*1000:.1f}ms > {self.inference_timeout_s*1000:.0f}ms")
         return raw
 
-    def run(self):
+    def run(self, stop_event=None):
         log.info("Starting 20Hz Flight Loop...")
         frame_id = 0
 
-        while True:
+        while stop_event is None or not stop_event.is_set():
             loop_start = time.time()
 
             if self.use_simulator:

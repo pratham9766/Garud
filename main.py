@@ -36,6 +36,7 @@ from sensors.barometer import barometer_worker
 from sensors.gps import gps_worker
 from sensors.imu import imu_worker
 from telemetry.xbee_sender import telemetry_worker
+from gnc.gnc_worker import FlightComputer
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--mock", action="store_true", help="Use mock hardware.")
     parser.add_argument("--real-hardware", action="store_true", help="Force real hardware mode.")
+    parser.add_argument(
+        "--drop-height",
+        type=float,
+        default=0.0,
+        metavar="METERS",
+        help="Height above ground (meters) at which the software is started. "
+             "Use when booting on a rooftop or elevated position so the barometer "
+             "baseline is corrected to true ground level. Example: --drop-height 36",
+    )
 
     for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping", "navigation_estimator"):
         flag = name.replace("_", "-")
@@ -385,6 +395,15 @@ def main() -> None:
         thread_mgr.register(
             ManagedThread("Telemetry", lambda evt: telemetry_worker(shared, evt))
         )
+
+    # GNC flight computer (always active — manages servos and descent steering)
+    _drop_height = args.drop_height
+    fc = FlightComputer(shared, drop_height=_drop_height)
+    thread_mgr.register(
+        ManagedThread("GNC", lambda evt: fc.run(evt))
+    )
+    if _drop_height > 0.0:
+        logger.info("[GNC] Drop-height correction active: %.1f m offset applied to ground altitude", _drop_height)
 
     if config.ENABLE_LOGGING:
         data_logger = DataLogger(shared)
