@@ -114,24 +114,28 @@ python -B tests/test_telemetry.py
 python -B tests/test_ahrs.py
 python -B tests/test_diagnostics.py
 python -B tests/test_flight_state_machine.py
+python -B tests/test_fake_mapping.py
+python -B tests/test_full_simulation.py
 ```
 
 Result: passed.
 
-`tests/test_full_simulation.py` was not completed because the bundled runtime does not have `simplekml`, and the checked-in `venv` points to a missing Python executable. Hardware tests were not run because the Pi/HAT sensors were not attached to this machine.
+`tests/test_full_simulation.py` now starts the Navigation worker and asserts that the estimator publishes a nonzero estimated position. It passed using the built-in HTML/KML mapping fallbacks because the bundled runtime does not include `folium` or `simplekml`.
+
+Hardware tests were not run because the Pi/HAT sensors were not attached to this machine.
 
 ## G. Benchmark
 
 `tests/test_navigation_estimator.py` ran 10,000 synthetic updates:
 
 ```text
-mean = 0.0517 ms
-p95  = 0.0816 ms
-p99  = 0.1220 ms
-max  = 0.7313 ms
+mean = 0.1756 ms
+p95  = 0.2185 ms
+p99  = 1.6218 ms
+max  = 67.3330 ms
 ```
 
-At 20 Hz, the available period is 50 ms. The estimator uses a small fraction of that budget in software tests.
+At 20 Hz, the available period is 50 ms. Mean and p95 are still far below the period; the maximum result included a Windows scheduling spike on the development laptop and should be remeasured on the Raspberry Pi flight computer.
 
 ## H. Remaining Risks
 

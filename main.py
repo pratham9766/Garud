@@ -36,7 +36,6 @@ from sensors.barometer import barometer_worker
 from sensors.gps import gps_worker
 from sensors.imu import imu_worker
 from telemetry.xbee_sender import telemetry_worker
-from gnc.gnc_worker import FlightComputer
 
 logger = logging.getLogger(__name__)
 
@@ -397,6 +396,8 @@ def main() -> None:
         )
 
     # GNC flight computer (always active — manages servos and descent steering)
+    from gnc.gnc_worker import FlightComputer
+
     _drop_height = args.drop_height
     fc = FlightComputer(shared, drop_height=_drop_height)
     thread_mgr.register(
