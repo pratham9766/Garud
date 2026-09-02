@@ -59,20 +59,21 @@ Use `hardware_tests/test_servo_real.py` for one channel and `hardware_tests/test
 | IN3 | GPIO23 | Pin 16 |
 | IN4 | GPIO18 | Pin 12 |
 
-## LoRa Telemetry
+## XBee Telemetry
 
 | Signal | Pi GPIO | Physical Pin | HAT Net |
 |--------|---------|--------------|---------|
 | Pi TXD | GPIO14 | Pin 8 | telemetry radio RX |
 | Pi RXD | GPIO15 | Pin 10 | telemetry radio TX |
-| 5 V | - | Pin 2/4 rail | LoRa power as designed |
+| 5 V | - | Pin 2/4 rail | XBee/telemetry radio power as designed |
 | GND | - | Ground rail | Common ground |
 
-Disable the Raspberry Pi serial console before using GPIO14/GPIO15 for LoRa.
+Disable the Raspberry Pi serial console before using GPIO14/GPIO15 for XBee
+telemetry.
 
 ## GPS
 
-- The HAT schema uses the primary UART pins for LoRa telemetry.
+- The HAT schema uses the primary UART pins for XBee telemetry.
 - Keep GPS on the SC16IS750 UART-over-SPI bridge at SPI0 CE1/GPIO7 unless
   `GPS_TRANSPORT` is deliberately changed for bench debugging.
 
@@ -95,7 +96,7 @@ Disable the Raspberry Pi serial console before using GPIO14/GPIO15 for LoRa.
 - [ ] HAT 5 V and 3.3 V rails present
 - [ ] I2C devices visible (`i2cdetect -y 1`)
 - [ ] SPI enabled and BMP388 CS on GPIO8 plus SC16IS750 CS on GPIO7 connected
-- [ ] LoRa UART data visible after serial console is disabled
+- [ ] XBee UART data visible after serial console is disabled
 - [ ] Camera preview working
 - [ ] Servos powered from HAT/external 5 V rail, not Pi logic power
 - [ ] All grounds tied together

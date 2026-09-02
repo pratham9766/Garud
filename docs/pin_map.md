@@ -9,8 +9,8 @@ Raspberry Pi 4 GPIO assignment for the GARUDA HAT payload schema (`Schema_Draft_
 | I2C SDA | GPIO2 | 3 | Bidirectional | `SDA_BNO`, `SDA_Servo`, `SDA_INA` |
 | I2C SCL | GPIO3 | 5 | Output | `SCL_BNO`, `SCL_Servo`, `SCL_INA` |
 | Servo OE | GPIO4 | 7 | Output | PCA9685 output enable, `OE_Servo` |
-| XBee/LoRa TXD | GPIO14 | 8 | Output | Pi TX to telemetry radio RX |
-| XBee/LoRa RXD | GPIO15 | 10 | Input | Pi RX from telemetry radio TX |
+| XBee TXD | GPIO14 | 8 | Output | Pi TX to telemetry radio RX |
+| XBee RXD | GPIO15 | 10 | Input | Pi RX from telemetry radio TX |
 | BMP388 INT | GPIO17 | 11 | Input | `INT_BMP` |
 | ULN2003 IN4 | GPIO18 | 12 | Output | Stepper driver input 4 |
 | ULN2003 IN3 | GPIO23 | 16 | Output | Stepper driver input 3 |
@@ -67,8 +67,8 @@ Note: if both PCA9685 and INA219 are on the same default I2C address, change one
         3.3V  (1) (2)  5V
       I2C SDA (3) (4)  5V
       I2C SCL (5) (6)  GND
-     Servo OE (7) (8)  LoRa RX input from Pi TX (GPIO14)
-         GND (9) (10) LoRa TX output to Pi RX (GPIO15)
+     Servo OE (7) (8)  XBee RX input from Pi TX (GPIO14)
+         GND (9) (10) XBee TX output to Pi RX (GPIO15)
    BMP388 INT (11)(12) ULN2003 IN4
           NC (13)(14) GND
           NC (15)(16) ULN2003 IN3

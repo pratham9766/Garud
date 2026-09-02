@@ -9,9 +9,11 @@ Press Ctrl+C to stop cleanly.
 
 from __future__ import annotations
 
+import argparse
 import logging
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -22,6 +24,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import config
 from camera.camera_manager import camera_worker
+from core.flight_state_machine import FlightStateController
 from core.health_monitor import health_monitor_loop
 from core.mission_state import MissionState, next_state
 from core.shared_data import SharedData
@@ -38,12 +41,75 @@ from telemetry.xbee_sender import telemetry_worker
 logger = logging.getLogger(__name__)
 
 
+class TestModeControl:
+    """Operator-controlled state-machine switchboard for ground testing."""
+
+    def __init__(self, auto_transitions: bool = False) -> None:
+        self._lock = threading.Lock()
+        self.auto_transitions = auto_transitions
+        self.quit_requested = False
+
+    def set_auto(self, enabled: bool) -> None:
+        with self._lock:
+            self.auto_transitions = enabled
+
+    def request_quit(self) -> None:
+        with self._lock:
+            self.quit_requested = True
+
+    def snapshot(self) -> tuple[bool, bool]:
+        with self._lock:
+            return self.auto_transitions, self.quit_requested
+
+
 def setup_logging() -> None:
     logging.basicConfig(
         level=getattr(logging, config.LOG_LEVEL, logging.INFO),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="GARUDA ground mapping payload runtime.")
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="Run live workers with operator-controlled states for ground testing.",
+    )
+    parser.add_argument(
+        "--auto-transitions",
+        action="store_true",
+        help="Start test mode with sensor-driven state transitions enabled.",
+    )
+    parser.add_argument("--mock", action="store_true", help="Use mock hardware.")
+    parser.add_argument("--real-hardware", action="store_true", help="Force real hardware mode.")
+
+    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping"):
+        flag = name.replace("_", "-")
+        parser.add_argument(f"--enable-{flag}", action="store_true", help=f"Enable {name}.")
+        parser.add_argument(f"--disable-{flag}", action="store_true", help=f"Disable {name}.")
+    return parser
+
+
+def apply_runtime_overrides(args: argparse.Namespace) -> None:
+    if args.mock and args.real_hardware:
+        raise SystemExit("--mock and --real-hardware cannot be used together.")
+    if args.mock:
+        config.USE_MOCK_HARDWARE = True
+    if args.real_hardware:
+        config.USE_MOCK_HARDWARE = False
+    if args.test_mode:
+        config.PAUSE_STATE_TRANSITIONS = not args.auto_transitions
+
+    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping"):
+        enable = getattr(args, f"enable_{name}")
+        disable = getattr(args, f"disable_{name}")
+        if enable and disable:
+            flag = name.replace("_", "-")
+            raise SystemExit(f"--enable-{flag} and --disable-{flag} cannot be used together.")
+        if enable or disable:
+            setattr(config, f"ENABLE_{name.upper()}", enable)
 
 
 def ensure_directories() -> None:
@@ -55,40 +121,153 @@ def ensure_directories() -> None:
 
 def run_mission_state_machine(shared: SharedData, stop_event) -> None:
     """
-    Advance mission states on a simple timer schedule.
+    Advance mission states from live sensors.
 
-    BOOT (0s) -> IDLE (3s) -> DESCENT (8s) -> LANDED (when altitude ~ 0 or timeout)
+    DISARMED -> ARMED_PAD -> BOOST -> COAST -> APOGEE -> DESCENT_DROGUE ->
+    GLIDER_DEPLOY at 600 m AGL -> GUIDED_DESCENT -> LANDED.
     """
     logger.info("Mission state machine started.")
-    shared.update(state=MissionState.BOOT.value, status="OK")
-    time.sleep(2.0)
-
-    if stop_event.is_set():
-        return
-
-    # BOOT -> IDLE
-    shared.update(state=MissionState.IDLE.value)
-    logger.info("Mission state: IDLE")
-    time.sleep(3.0)
-
-    if stop_event.is_set():
-        return
-
-    # IDLE -> DESCENT
-    shared.update(state=MissionState.DESCENT.value)
-    logger.info("Mission state: DESCENT")
-    shared.start_mission_clock()
-
-    # Stay in DESCENT until landed or stopped
+    controller = FlightStateController(shared)
+    controller.start()
     while not stop_event.is_set():
-        snap = shared.get_snapshot()
-        if snap.baro_altitude <= 5.0 and snap.mission_time > 10.0:
-            shared.update(state=MissionState.LANDED.value, status="OK")
-            logger.info("Mission state: LANDED (altitude %.1f m)", snap.baro_altitude)
+        state = controller.update()
+        if state == MissionState.LANDED:
             break
-        time.sleep(1.0)
+        time.sleep(0.1)
 
     logger.info("Mission state machine finished.")
+
+
+def _test_state_updates(state: MissionState) -> dict:
+    """Return side-effect flags that make manual states visible in logs."""
+    updates = {"status": f"TEST_{state.value}"}
+    if state == MissionState.ARMED_PAD:
+        updates["status"] = "TEST_ARMED"
+    elif state == MissionState.BOOST:
+        updates["launch_detected"] = True
+    elif state == MissionState.APOGEE:
+        updates["apogee_detected"] = True
+        updates["payload_ejected"] = True
+    elif state == MissionState.GLIDER_DEPLOY:
+        updates["glider_deployed"] = True
+    elif state == MissionState.GUIDED_DESCENT:
+        updates["glider_deployed"] = True
+        updates["actuation_enabled"] = True
+    elif state == MissionState.LANDED:
+        updates["actuation_enabled"] = False
+    elif state in {MissionState.DISARMED, MissionState.IDLE, MissionState.ABORT, MissionState.ERROR}:
+        updates["actuation_enabled"] = False
+    return updates
+
+
+def _set_test_state(shared: SharedData, state: MissionState) -> None:
+    shared.transition_state(
+        state,
+        reason="manual_test_override",
+        source="TEST_CONSOLE",
+        **_test_state_updates(state),
+    )
+    logger.info("Test mode forced state: %s", state.value)
+
+
+def _print_test_mode_help() -> None:
+    states = ", ".join(state.value for state in MissionState)
+    print()
+    print("GARUDA TEST MODE COMMANDS")
+    print("  help              show commands")
+    print("  auto on|off       enable/disable sensor-driven transitions")
+    print("  state <name>      force a state for ground testing")
+    print("  next              force the next nominal state")
+    print("  arm / disarm      convenience state commands")
+    print("  abort / landed    convenience state commands")
+    print("  snap              print one live sensor/gimbal/logging snapshot")
+    print("  quit              stop runtime cleanly")
+    print(f"  states: {states}")
+    print()
+
+
+def _test_command_loop(shared: SharedData, control: TestModeControl) -> None:
+    _print_test_mode_help()
+    while True:
+        try:
+            raw = input("garuda-test> ").strip()
+        except EOFError:
+            return
+        except KeyboardInterrupt:
+            control.request_quit()
+            return
+
+        if not raw:
+            continue
+        parts = raw.split()
+        command = parts[0].lower()
+
+        try:
+            if command in {"help", "h", "?"}:
+                _print_test_mode_help()
+            elif command == "auto" and len(parts) == 2 and parts[1].lower() in {"on", "off"}:
+                enabled = parts[1].lower() == "on"
+                control.set_auto(enabled)
+                logger.info("Test mode automatic transitions: %s", "ON" if enabled else "OFF")
+            elif command == "state" and len(parts) == 2:
+                _set_test_state(shared, MissionState(parts[1].upper()))
+            elif command == "next":
+                current = MissionState(shared.get_snapshot().state)
+                target = next_state(current)
+                if target is None:
+                    logger.warning("No nominal next state after %s.", current.value)
+                else:
+                    _set_test_state(shared, target)
+            elif command == "arm":
+                _set_test_state(shared, MissionState.ARMED_PAD)
+            elif command == "disarm":
+                _set_test_state(shared, MissionState.DISARMED)
+            elif command == "abort":
+                _set_test_state(shared, MissionState.ABORT)
+            elif command == "landed":
+                _set_test_state(shared, MissionState.LANDED)
+            elif command == "snap":
+                log_terminal_snapshot(shared)
+            elif command in {"quit", "exit", "q"}:
+                control.request_quit()
+                return
+            else:
+                logger.warning("Unknown test command: %s", raw)
+        except ValueError:
+            logger.warning("Unknown state. Type 'help' to list valid states.")
+
+
+def run_test_mode(shared: SharedData, stop_event, auto_transitions: bool = False) -> None:
+    """Run payload workers with operator-controlled state transitions."""
+    logger.info("Ground test mode started.")
+    shared.start_mission_clock()
+    _set_test_state(shared, MissionState.DISARMED)
+
+    control = TestModeControl(auto_transitions=auto_transitions)
+    command_thread = threading.Thread(
+        target=_test_command_loop,
+        args=(shared, control),
+        name="TestModeConsole",
+        daemon=True,
+    )
+    command_thread.start()
+    controller = FlightStateController(shared)
+    last_snapshot = 0.0
+
+    while not stop_event.is_set():
+        auto_enabled, quit_requested = control.snapshot()
+        if quit_requested:
+            break
+        if auto_enabled:
+            controller.update()
+
+        now = time.monotonic()
+        if now - last_snapshot >= 1.0:
+            log_terminal_snapshot(shared)
+            last_snapshot = now
+        time.sleep(0.1)
+
+    logger.info("Ground test mode finished.")
 
 
 def generate_outputs(log_path: Path) -> None:
@@ -151,6 +330,8 @@ def log_terminal_snapshot(shared: SharedData) -> None:
 
 
 def main() -> None:
+    args = build_parser().parse_args()
+    apply_runtime_overrides(args)
     setup_logging()
     ensure_directories()
 
@@ -225,7 +406,10 @@ def main() -> None:
             return global_stop
 
     try:
-        if config.PAUSE_STATE_TRANSITIONS:
+        if args.test_mode:
+            run_test_mode(shared, _StopProxy(), auto_transitions=args.auto_transitions)
+            global_stop = True
+        elif config.PAUSE_STATE_TRANSITIONS:
             shared.update(state=MissionState.IDLE.value, status="SETUP_TEST")
             shared.start_mission_clock()
             logger.info(

@@ -27,7 +27,8 @@ and true terrain orthorectification were skipped honestly.
 ## Features
 
 - Real BNO085, BMP388, GPS, camera, telemetry, and PCA9685 gimbal hardware paths.
-- Terminal and browser dashboards for manual live sensor verification.
+- Terminal test mode and browser ground station for manual state, sensor,
+  payload, telemetry, logging, and gimbal verification.
 - Threaded mission runtime with shared payload state.
 - CSV mission logging with image timestamps, angular velocity, raw IMU, and AHRS metadata.
 - AHRS-assisted pose priors for post-flight image normalization.
@@ -98,7 +99,7 @@ ground_mapping_payload/
 |-- sensor_fusion/      AHRS estimators, quaternion helpers, and pose priors
 |-- storage/            Mission manifest and metadata records
 |-- sensors/            GPS, IMU, and barometer interfaces
-|-- telemetry/          LoRa/XBee telemetry packet generation/sending
+|-- telemetry/          XBee telemetry packet generation/sending
 |-- vision/             Undistortion, pose normalization, features, matching
 |-- tests/              Simulation and module tests
 |-- config.py           Runtime configuration
@@ -159,6 +160,20 @@ python main.py
 Press `Ctrl+C` to stop the main program cleanly. When logging and mapping are
 enabled, the program generates output maps during shutdown.
 
+Run operator-controlled ground test mode:
+
+```bash
+python main.py --test-mode --real-hardware
+python main.py --test-mode --mock
+```
+
+Run the temporary browser ground station only when needed:
+
+```bash
+python hardware_tests/ground_station_dashboard.py --bench --real-hardware --host 0.0.0.0
+python hardware_tests/ground_station_dashboard.py --mock
+```
+
 ## Testing
 
 Generate a fake flight log and maps:
@@ -195,6 +210,7 @@ python hardware_tests/test_imu_real.py
 python hardware_tests/test_ahrs_real.py --mode bno085
 python hardware_tests/live_sensor_dashboard.py --mode bno085
 python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
+python hardware_tests/ground_station_dashboard.py --bench --real-hardware --host 0.0.0.0
 python hardware_tests/test_servo_real.py
 python hardware_tests/test_gimbal_real.py
 python hardware_tests/test_xbee_real.py
@@ -210,6 +226,7 @@ python hardware_tests/test_all_sensors_status.py
 | `data/maps/flight_path.html` | Interactive flight-path map |
 | `data/maps/flight_path.kml` | Google Earth KML export |
 | `data/logs/hardware_tests/` | Hardware test logs |
+| `data/logs/test_reports/` | Ground-station JSON, event CSV, and HTML verification reports |
 | `mapping_output/terrain_mapping_test_v2/` | Checked-in Wietrznia V2 result images and diagnostics |
 
 Runtime output folders are kept in the repository with `.gitkeep` files, while
@@ -273,7 +290,7 @@ Important outputs:
 ## CSV Format
 
 ```text
-timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,roll,pitch,yaw,gyro_x,gyro_y,gyro_z,image_name,image_timestamp,battery,status,ahrs_enabled,ahrs_source,ahrs_valid,ahrs_healthy,ahrs_confidence,quat_w,quat_x,quat_y,quat_z,ahrs_roll,ahrs_pitch,ahrs_yaw,attitude_accuracy_rad,imu_sample_age_ms,accel_correction_active,mag_correction_active,ahrs_timestamp_ns,raw_accel_x,raw_accel_y,raw_accel_z,raw_mag_x,raw_mag_y,raw_mag_z,raw_quat_w,raw_quat_x,raw_quat_y,raw_quat_z
+timestamp,mission_time,state,latitude,longitude,gps_altitude,baro_altitude,vertical_velocity,max_altitude,roll,pitch,yaw,gyro_x,gyro_y,gyro_z,image_name,image_timestamp,battery,status,ahrs_enabled,ahrs_source,ahrs_valid,ahrs_healthy,ahrs_confidence,quat_w,quat_x,quat_y,quat_z,ahrs_roll,ahrs_pitch,ahrs_yaw,attitude_accuracy_rad,imu_sample_age_ms,accel_correction_active,mag_correction_active,ahrs_timestamp_ns,raw_gyro_x,raw_gyro_y,raw_gyro_z,raw_accel_x,raw_accel_y,raw_accel_z,raw_mag_x,raw_mag_y,raw_mag_z,raw_quat_w,raw_quat_x,raw_quat_y,raw_quat_z,raw_imu_timestamp_ns,raw_imu_accuracy_rad,raw_imu_calibration_status,raw_baro_pressure_hpa,raw_baro_temperature_c,gimbal_x_deflection_deg,gimbal_y_deflection_deg,gimbal_stepper_angle_deg,gimbal_servo_angle_deg,gimbal_stepper_steps,gimbal_ok,launch_detected,apogee_detected,payload_ejected,glider_deployed,actuation_enabled,previous_state,state_transition_reason,telemetry_sequence,telemetry_tx_count,bus_voltage_v,current_a,power_w,min_voltage_v,max_current_a,undervoltage_events,logger_rows_written,logger_errors,camera_capture_sequence,camera_total_captures,camera_successful_captures,camera_failed_captures,camera_dropped_captures,camera_last_file_size_bytes,camera_last_write_latency_ms,image_sync_imu_delta_ms,image_sync_gps_delta_ms,image_sync_baro_delta_ms,image_quality_sharpness,image_quality_brightness,image_quality_underexposed_fraction,image_quality_overexposed_fraction,image_quality_status,images_referenced,images_present,images_missing,images_orphan
 ```
 
 ## Configuration
@@ -307,6 +324,48 @@ AHRS_RATE_HZ = 100
 ```
 
 Keep `USE_MOCK_HARDWARE = False` on the Raspberry Pi for real sensor testing.
+
+Flight state transition settings:
+
+```python
+TARGET_APOGEE_AGL_M = 1000.0
+GLIDER_DEPLOY_ALTITUDE_AGL_M = 600.0
+STATE_CONFIRMATION_COUNT = 5
+
+LAUNCH_DETECT_ACCEL_G = 1.5
+LAUNCH_DETECT_ALTITUDE_AGL_M = 30.0
+
+BOOST_BURNOUT_ACCEL_G = 1.5
+BOOST_MAX_DURATION_SEC = 10.0
+
+APOGEE_DESCENT_VELOCITY_MPS = -1.0
+APOGEE_ALTITUDE_DROP_M = 2.0
+APOGEE_MIN_ALTITUDE_AGL_M = 50.0
+APOGEE_BACKUP_TIME_SEC = 30.0
+
+GLIDER_DEPLOY_CONFIRMATION_COUNT = 5
+GLIDER_DEPLOY_SETTLE_SEC = 1.0
+
+LANDING_DETECT_ALTITUDE_AGL_M = 20.0
+LANDING_DETECT_VELOCITY_MPS = 1.0
+LANDING_DETECT_TIME_SEC = 5.0
+
+MAX_FLIGHT_TIME_SEC = 600.0
+```
+
+State transition summary:
+
+| Transition | Constraint |
+| --- | --- |
+| `ARMED_PAD -> BOOST` | 3 confirmed readings of acceleration `> 1.5 g` or altitude `> 30.0 m AGL` |
+| `BOOST -> COAST` | 5 confirmed readings of acceleration `< 1.5 g`, or boost duration `> 10.0 s` |
+| `COAST -> APOGEE` | 5 confirmed readings of descent: velocity `< -1.0 m/s`, altitude drop `> 2.0 m` from max altitude, and altitude `> 50.0 m AGL`; backup after `30.0 s` from launch |
+| `APOGEE -> DESCENT_DROGUE` | `1.0 s` settle after apogee/payload ejection |
+| `DESCENT_DROGUE -> GLIDER_DEPLOY` | 5 confirmed readings of altitude `<= 600.0 m AGL` while descending |
+| `GLIDER_DEPLOY -> GUIDED_DESCENT` | `1.0 s` settle, then `actuation_enabled=True` |
+| `GUIDED_DESCENT -> LANDED` | Landing conditions persist for `5.0 s`: altitude `< 20.0 m AGL`, vertical speed `< 1.0 m/s`, acceleration near `1 g` |
+
+See `docs/flight_flow.md` for the full state diagram and abort behavior.
 
 Mapping footprint settings:
 
@@ -359,6 +418,17 @@ python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 
 Open `http://<raspberry-pi-ip>:8080`. The page refreshes live readings and the
 latest captured camera frame.
+
+For integrated state-transition and payload verification:
+
+```bash
+python hardware_tests/ground_station_dashboard.py --bench --real-hardware --host 0.0.0.0
+```
+
+The ground station is separate from `main.py`, so it opens only when this script
+is run. It shows state controls, event-marked graphs, worker health,
+PASS/WARN/FAIL verification, mock-only fault injection, and saved test reports
+under `data/logs/test_reports/`.
 
 The mapping, logging, telemetry, and post-flight processing pipelines are kept
 independent of the hardware adapters. Mock classes remain only for local

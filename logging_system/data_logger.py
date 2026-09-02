@@ -9,7 +9,9 @@ roll,pitch,yaw,image_name,battery,status
 from __future__ import annotations
 
 import logging
+import shutil
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -38,6 +40,9 @@ class DataLogger:
         self.log_path = self.log_dir / filename
         self._file = None
         self._lock = threading.Lock()
+        self.rows_written = 0
+        self.write_errors = 0
+        self.last_write_timestamp = 0.0
 
     def open(self) -> None:
         """Open log file and write CSV header."""
@@ -54,6 +59,12 @@ class DataLogger:
         with self._lock:
             self._file.write(row + "\n")
             self._file.flush()
+            self.rows_written += 1
+            self.last_write_timestamp = time.time()
+        self.shared.update(
+            logger_rows_written=self.rows_written,
+            logger_last_write_timestamp=self.last_write_timestamp,
+        )
 
     def close(self) -> None:
         """Close the log file."""
@@ -78,9 +89,27 @@ def logger_worker(
     try:
         while not stop_event.is_set():
             try:
+                if config.USE_MOCK_HARDWARE and shared.is_fault_active("logger_write_failure"):
+                    raise OSError("Mock logger write failure injected.")
                 data_logger.write_row()
+                file_size = data_logger.path.stat().st_size if data_logger.path.exists() else 0
+                disk = shutil.disk_usage(data_logger.path.parent)
+                shared.record_worker_success(
+                    "DataLogger",
+                    expected_hz=config.LOGGER_EXPECTED_HZ,
+                    reason="CSV row written and flushed.",
+                    details={
+                        "active_log_file": str(data_logger.path),
+                        "rows_written": data_logger.rows_written,
+                        "file_size_bytes": file_size,
+                        "disk_free_bytes": disk.free,
+                    },
+                )
             except Exception as exc:
+                data_logger.write_errors += 1
+                shared.update(logger_errors=data_logger.write_errors)
                 logger.error("CSV write error: %s", exc)
+                shared.record_worker_error("DataLogger", exc, expected_hz=config.LOGGER_EXPECTED_HZ)
 
             stop_event.wait(config.SENSOR_LOG_INTERVAL_SEC)
     finally:

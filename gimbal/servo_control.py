@@ -113,6 +113,7 @@ class RealGimbal(BaseGimbal):
         return value
 
     def _move_stepper_to(self, target_deg: float) -> int:
+        unclamped_target = target_deg
         target_deg = self._clamp(
             target_deg,
             config.GIMBAL_STEPPER_MIN_DEG,
@@ -142,13 +143,15 @@ class RealGimbal(BaseGimbal):
 
         max_servo_step = config.GIMBAL_SERVO_RATE_LIMIT_DPS * max(dt, 0.0)
         max_stepper_step = config.GIMBAL_STEPPER_RATE_LIMIT_DPS * max(dt, 0.0)
+        raw_stepper_target = config.GIMBAL_STEPPER_HOME_DEG + config.GIMBAL_STEPPER_SIGN * x_deflection
+        raw_servo_target = config.GIMBAL_SERVO_CENTER + config.GIMBAL_SERVO_SIGN * y_deflection
         desired_stepper = self._clamp(
-            config.GIMBAL_STEPPER_HOME_DEG + config.GIMBAL_STEPPER_SIGN * x_deflection,
+            raw_stepper_target,
             self._stepper_angle_deg - max_stepper_step,
             self._stepper_angle_deg + max_stepper_step,
         )
         desired_servo = self._clamp(
-            config.GIMBAL_SERVO_CENTER + config.GIMBAL_SERVO_SIGN * y_deflection,
+            raw_servo_target,
             self._servo_angle_deg - max_servo_step,
             self._servo_angle_deg + max_servo_step,
         )
@@ -163,9 +166,15 @@ class RealGimbal(BaseGimbal):
         return {
             "x_deflection_deg": x_deflection,
             "y_deflection_deg": y_deflection,
+            "stepper_target_deg": raw_stepper_target,
+            "servo_target_deg": raw_servo_target,
             "stepper_angle_deg": self._stepper_angle_deg,
             "servo_angle_deg": self._servo_angle_deg,
             "stepper_steps": stepper_steps,
+            "stepper_rate_limited": abs(desired_stepper - raw_stepper_target) > 1e-6,
+            "servo_rate_limited": abs(desired_servo - raw_servo_target) > 1e-6,
+            "stepper_saturated": raw_stepper_target < config.GIMBAL_STEPPER_MIN_DEG or raw_stepper_target > config.GIMBAL_STEPPER_MAX_DEG,
+            "servo_saturated": raw_servo_target < config.GIMBAL_SERVO_MIN or raw_servo_target > config.GIMBAL_SERVO_MAX,
         }
 
     def close(self) -> None:

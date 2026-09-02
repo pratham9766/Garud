@@ -180,6 +180,63 @@ Ctrl+C
 Always stop cleanly so the logger closes the CSV file and mapping output is
 generated.
 
+## 5A. Ground Test Mode
+
+Ground test mode runs the same live runtime workers as the flight program, but
+keeps state transitions under operator control. Use it for on-ground checks of
+sensor reading, gimbal stabilization, actuation flags, telemetry packets, camera
+capture, and CSV logging.
+
+Start a real-hardware ground test:
+
+```bash
+python main.py --test-mode --real-hardware
+```
+
+Start a dry run with mock devices:
+
+```bash
+python main.py --test-mode --mock
+```
+
+Enable or disable subsystems without editing `config.py`:
+
+```bash
+python main.py --test-mode --real-hardware --enable-gps --enable-camera --enable-telemetry
+python main.py --test-mode --real-hardware --disable-camera --disable-telemetry
+```
+
+In the `garuda-test>` console:
+
+```text
+help              show commands
+auto on           enable sensor-driven state transitions
+auto off          pause sensor-driven state transitions
+state <name>      force a state, for example state GUIDED_DESCENT
+next              force the next nominal state
+arm / disarm      switch pad arming state
+abort / landed    force abort or landed
+snap              print one live sensor/gimbal snapshot
+quit              stop cleanly, close logs, and generate map outputs if enabled
+```
+
+Typical on-ground sequence:
+
+```text
+state DISARMED
+arm
+state DESCENT_DROGUE
+state GLIDER_DEPLOY
+state GUIDED_DESCENT
+snap
+auto off
+landed
+quit
+```
+
+Use `auto on` only when you intentionally want the normal sensor-driven flight
+state controller to advance states from live barometer and IMU readings.
+
 ## 6. Output Files
 
 | Output | Purpose |
@@ -216,10 +273,11 @@ Recommended order:
 7. Test IMU.
 8. Test servos.
 9. Test gimbal.
-10. Test LoRa telemetry.
+10. Test XBee telemetry.
 11. Run the live terminal dashboard and visually check the readings.
 12. Run the browser dashboard and visually check the camera frame.
-13. Run a short real-hardware field walk.
+13. Run the integrated ground station and save a test report.
+14. Run a short real-hardware field walk.
 
 Commands:
 
@@ -232,6 +290,7 @@ python hardware_tests/test_imu_real.py
 python hardware_tests/test_ahrs_real.py --mode bno085
 python hardware_tests/live_sensor_dashboard.py --mode bno085
 python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
+python hardware_tests/ground_station_dashboard.py --bench --real-hardware --host 0.0.0.0
 python hardware_tests/test_servo_real.py
 python hardware_tests/test_gimbal_real.py
 python hardware_tests/test_xbee_real.py
@@ -252,7 +311,7 @@ Enable interfaces with `raspi-config`:
 - Camera
 - I2C for BNO085/PCA9685/INA219
 - SPI for BMP388/SC16IS750
-- Serial as needed for GPS/LoRa
+- Serial as needed for GPS/XBee
 
 ## 9. Pre-Flight Checklist
 
@@ -290,7 +349,7 @@ Camera errors:
 No telemetry:
 
 - Confirm `XBEE_PORT` and `XBEE_BAUDRATE`.
-- Check LoRa pairing/configuration and ground-station receiver.
+- Check XBee pairing/configuration and ground-station receiver.
 - Run `hardware_tests/test_xbee_real.py`.
 
 ## 11. Development Notes
@@ -337,6 +396,66 @@ python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0
 Open `http://<raspberry-pi-ip>:8080` from a laptop or the Pi browser. The page
 shows live GPS, barometer, raw IMU, AHRS, telemetry preview, and latest captured
 camera frame.
+
+For an integrated temporary ground-station dashboard with graphs and state
+controls:
+
+```bash
+python hardware_tests/ground_station_dashboard.py --host 0.0.0.0 --bench
+```
+
+Open `http://<raspberry-pi-ip>:8080`. The page shows mission state, subsystem
+health, GPS/barometer altitude, vertical rate, attitude graphs, raw gyro rates,
+gimbal command graphs, telemetry preview, and the latest camera frame when the
+camera worker is enabled. Use the page controls to force a state, step to the
+next nominal state, or toggle automatic sensor-driven transitions.
+
+Modes:
+
+```text
+--mock           dry run with synthetic devices and fault injection enabled
+--bench          real hardware engineering mode with manual state controls
+--real-hardware  flight-style mode; manual state controls disabled by default
+```
+
+For a safe dry run:
+
+```bash
+python hardware_tests/ground_station_dashboard.py --mock --disable-camera --disable-telemetry
+```
+
+The dashboard includes Mission, Sensors, Payload, System, Telemetry, and Test
+tabs. It includes event markers on plots, detector condition readouts, live
+lightweight image quality, image-sensor synchronization deltas, power values,
+worker health, storage validation, and a PASS/WARN/FAIL verification summary.
+The Test tab can start/stop/reset a recording session. Stopped test reports are
+written as JSON, event CSV, and HTML summary files to:
+
+```text
+data/logs/test_reports/
+```
+
+In mock mode only, the Test tab can inject faults into the normal worker path:
+
+```text
+gps_loss
+gps_high_hdop
+freeze_gps
+freeze_imu
+imu_drift
+freeze_barometer
+barometer_drift
+camera_timeout
+camera_dropped_frame
+telemetry_drop
+logger_write_failure
+gimbal_saturation
+low_voltage
+high_cpu_temperature
+```
+
+In real hardware mode, unsupported metrics are shown as unavailable or disabled
+instead of being invented.
 
 ## 12. Mapping Algorithm
 

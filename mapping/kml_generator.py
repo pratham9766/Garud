@@ -7,6 +7,7 @@ Reads CSV log and writes data/maps/flight_path.kml.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -95,7 +96,12 @@ def generate_kml(
             "http://maps.google.com/mapfiles/kml/shapes/camera.png"
         )
 
-    kml.save(str(output_path))
+    try:
+        kml.save(str(output_path))
+    except PermissionError:
+        fallback_name = f"{output_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{output_path.suffix}"
+        output_path = output_path.with_name(fallback_name)
+        kml.save(str(output_path))
     logger.info("KML saved: %s", output_path)
     return output_path
 
