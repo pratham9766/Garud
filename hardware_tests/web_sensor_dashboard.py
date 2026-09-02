@@ -24,6 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import config
 from camera.camera_manager import create_camera
 from core.shared_data import SharedData
+from navigation.navigation_estimator import NavigationEstimator
 from sensors.barometer import create_barometer
 from sensors.gps import create_gps
 from sensors.imu import create_imu
@@ -86,6 +87,7 @@ pre { margin: 0; overflow: auto; color: #cdd6e4; line-height: 1.35; font-size: 1
       <div class="tile"><div class="label">Sample Age</div><div class="value" id="age">--</div></div>
       <div class="tile wide"><div class="label">Quaternion w,x,y,z</div><div class="small" id="quat">--</div></div>
       <div class="tile wide"><div class="label">Raw IMU</div><div class="small" id="raw">--</div></div>
+      <div class="tile wide"><div class="label">Estimated Navigation</div><div class="small" id="nav">--</div></div>
       <div class="tile wide"><div class="label">Telemetry Preview</div><pre id="packet">--</pre></div>
     </div>
   </section>
@@ -106,10 +108,11 @@ async function refresh() {
   document.getElementById('pitch').textContent = fmt(s.ahrs.pitch_deg, 2, ' deg');
   document.getElementById('yaw').textContent = fmt(s.ahrs.yaw_deg, 2, ' deg');
   document.getElementById('alt').textContent = fmt(s.baro.altitude_m, 1, ' m');
-  document.getElementById('gps').textContent = `${s.gps.fix ? 'fix' : 'no fix'}  ${fmt(s.gps.lat,6)}, ${fmt(s.gps.lon,6)}`;
+  document.getElementById('gps').textContent = `${s.gps.fix ? 'fix' : 'no fix'}  ${fmt(s.gps.lat,6)}, ${fmt(s.gps.lon,6)} | speed ${fmt(s.gps.speed_mps,1,' m/s')} | course ${fmt(s.gps.course_deg,1,' deg')} | sats ${s.gps.satellites} | HDOP ${s.gps.hdop} | age ${fmt(s.nav.gps_age_ms,0,' ms')}`;
   document.getElementById('age').textContent = fmt(s.ahrs.sample_age_ms, 1, ' ms');
   document.getElementById('quat').textContent = s.ahrs.quaternion.map(v => fmt(v, 5)).join(', ');
   document.getElementById('raw').textContent = `accel ${s.raw.accel.join(', ')} | gyro ${s.raw.gyro.join(', ')} | mag ${s.raw.mag.join(', ')}`;
+  document.getElementById('nav').textContent = `${s.nav.mode} | pos ${s.nav.position_quality} | head ${s.nav.heading_quality} | alt ${s.nav.altitude_quality} | est ${fmt(s.nav.lat,6)}, ${fmt(s.nav.lon,6)} | N/E ${fmt(s.nav.north_m,1,' m')}, ${fmt(s.nav.east_m,1,' m')} | VN/VE ${fmt(s.nav.vn_mps,1,' m/s')}, ${fmt(s.nav.ve_mps,1,' m/s')} | gs ${fmt(s.nav.ground_speed_mps,1,' m/s')} | course ${fmt(s.nav.course_deg,1,' deg')} | heading ${fmt(s.nav.heading_deg,1,' deg')} | GPS error ${fmt(s.nav.gps_position_error_m,1,' m')} | rejected ${s.nav.gps_rejected} ${s.nav.gps_rejection_reason} | DR ${s.nav.dead_reckoning_active} ${fmt(s.nav.dead_reckoning_age_s,1,' s')} | recovery ${s.nav.recovery_active} | safe ${s.nav.safe_for_guidance}`;
   document.getElementById('packet').textContent = s.telemetry;
   if (s.image.url) document.getElementById('frame').src = s.image.url + '&t=' + Date.now();
 }
@@ -128,6 +131,7 @@ class DashboardState:
         self.started = time.monotonic()
         self.shared = SharedData()
         self.ahrs = AHRSManager(mode=mode, enabled=mode != "OFF")
+        self.nav = NavigationEstimator()
         self.lock = threading.Lock()
         self.latest_image: Path | None = None
         self.health = {"gps": "INIT", "barometer": "INIT", "imu": "INIT", "camera": "INIT"}
@@ -151,6 +155,11 @@ class DashboardState:
                     "lat": snap.latitude,
                     "lon": snap.longitude,
                     "altitude_m": snap.gps_altitude,
+                    "speed_mps": snap.gps_ground_speed_mps,
+                    "course_deg": snap.gps_course_deg,
+                    "satellites": snap.gps_satellites,
+                    "hdop": snap.gps_hdop,
+                    "fix_type": snap.gps_fix_type,
                 },
                 "baro": {"altitude_m": snap.baro_altitude},
                 "ahrs": {
@@ -165,6 +174,31 @@ class DashboardState:
                     "quaternion": [snap.quat_w, snap.quat_x, snap.quat_y, snap.quat_z],
                 },
                 "raw": dict(self.last_raw),
+                "nav": {
+                    "mode": snap.navigation_mode,
+                    "position_quality": snap.position_quality,
+                    "heading_quality": snap.heading_quality,
+                    "altitude_quality": snap.altitude_quality,
+                    "lat": snap.estimated_latitude,
+                    "lon": snap.estimated_longitude,
+                    "north_m": snap.estimated_north_m,
+                    "east_m": snap.estimated_east_m,
+                    "altitude_m": snap.estimated_altitude_m,
+                    "vn_mps": snap.estimated_velocity_north_mps,
+                    "ve_mps": snap.estimated_velocity_east_mps,
+                    "ground_speed_mps": snap.estimated_ground_speed_mps,
+                    "course_deg": snap.estimated_course_deg,
+                    "heading_deg": snap.estimated_heading_deg,
+                    "gps_valid": snap.nav_gps_valid,
+                    "gps_rejected": snap.nav_gps_rejected,
+                    "gps_rejection_reason": snap.nav_gps_rejection_reason,
+                    "gps_age_ms": snap.nav_gps_age_ms,
+                    "gps_position_error_m": snap.nav_gps_position_error_m,
+                    "dead_reckoning_active": snap.dead_reckoning_active,
+                    "dead_reckoning_age_s": snap.dead_reckoning_age_s,
+                    "recovery_active": snap.recovery_active,
+                    "safe_for_guidance": snap.safe_for_guidance,
+                },
                 "image": {"name": snap.image_name, "url": image_url},
                 "telemetry": packet,
             }
@@ -190,6 +224,12 @@ def _sensor_loop(state: DashboardState, stop: threading.Event) -> None:
                         latitude=gps_reading.get("latitude", 0.0),
                         longitude=gps_reading.get("longitude", 0.0),
                         gps_altitude=gps_reading.get("altitude", 0.0),
+                        gps_ground_speed_mps=float(gps_reading.get("ground_speed_mps") or 0.0),
+                        gps_course_deg=float(gps_reading.get("course_deg") or 0.0),
+                        gps_satellites=int(gps_reading.get("satellites") or 0),
+                        gps_hdop=float(gps_reading.get("hdop") or 0.0),
+                        gps_fix_type=str(gps_reading.get("fix_type", "NO FIX")),
+                        gps_timestamp_ns=int(gps_reading.get("timestamp_ns") or time.monotonic_ns()),
                         gps_ok=bool(gps_reading.get("fix_ok")),
                     )
                     state.health["gps"] = "OK"
@@ -202,6 +242,9 @@ def _sensor_loop(state: DashboardState, stop: threading.Event) -> None:
                 with state.lock:
                     state.shared.update(
                         baro_altitude=baro_reading.get("altitude", 0.0),
+                        raw_baro_pressure_hpa=baro_reading.get("pressure", 0.0),
+                        raw_baro_temperature_c=baro_reading.get("temperature", 0.0),
+                        baro_timestamp_ns=int(baro_reading.get("timestamp_ns") or time.monotonic_ns()),
                         barometer_ok=True,
                     )
                     state.health["barometer"] = "OK"
@@ -225,6 +268,9 @@ def _sensor_loop(state: DashboardState, stop: threading.Event) -> None:
             except Exception as exc:
                 with state.lock:
                     state.health["imu"] = f"ERR {type(exc).__name__}"
+
+            with state.lock:
+                state.shared.publish_navigation(state.nav.update(state.shared.get_snapshot()))
 
             stop.wait(1.0 / max(1.0, config.AHRS_RATE_HZ))
     finally:

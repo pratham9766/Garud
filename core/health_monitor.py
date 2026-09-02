@@ -50,11 +50,23 @@ def health_monitor_loop(
                 snap.state,
                 ", ".join(issues),
             )
+            shared.record_worker_success(
+                "HealthMonitor",
+                expected_hz=config.HEALTH_MONITOR_EXPECTED_HZ,
+                reason=f"Subsystems degraded: {', '.join(issues)}.",
+                details={"issues": issues},
+            )
         else:
             logger.info(
                 "Health check [%s] — all subsystems OK (battery %.1f%%)",
                 snap.state,
                 snap.battery,
+            )
+            shared.record_worker_success(
+                "HealthMonitor",
+                expected_hz=config.HEALTH_MONITOR_EXPECTED_HZ,
+                reason="All enabled subsystem flags OK.",
+                details={"issues": []},
             )
 
         stop_event.wait(interval_sec)

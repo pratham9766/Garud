@@ -12,6 +12,7 @@ venv/
 env/
 
 # Runtime outputs
+images/*
 data/images/*
 data/logs/*
 data/maps/*

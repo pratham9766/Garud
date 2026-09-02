@@ -21,10 +21,13 @@ Pre-flight and bring-up checklist for the Ground Mapping Payload.
 - [ ] **AHRS test** - source, quaternion, attitude health, and sample age update; `python hardware_tests/test_ahrs_real.py --mode bno085`
 - [ ] **Live dashboard** - all sensor readings and AHRS state visible; `python hardware_tests/live_sensor_dashboard.py --mode bno085`
 - [ ] **Browser dashboard** - readings plus camera frame visible; `python hardware_tests/web_sensor_dashboard.py --mode bno085 --host 0.0.0.0`
+- [ ] **Navigation estimator** - raw GPS and estimated navigation visible; `python hardware_tests/navigation_field_test.py --seconds 60`
+- [ ] **GPS interruption** - bounded dead reckoning and recovery verified; `python hardware_tests/navigation_field_test.py --seconds 90 --simulate-gps-loss-after 30 --simulate-gps-loss-seconds 5`
 - [ ] **Barometer test** - BMP388 altitude reading plausible after real driver is added
 - [ ] **Servo test** - PCA9685 sweep without load; `python hardware_tests/test_servo_real.py`
 - [ ] **Gimbal test** - 2-axis PCA9685 sweep; `python hardware_tests/test_gimbal_real.py`
-- [ ] **LoRa telemetry test** - packet received on ground station; `python hardware_tests/test_xbee_real.py`
+- [ ] **XBee telemetry test** - packet received on ground station; `python hardware_tests/test_xbee_real.py`
+- [ ] **Integrated ground station** - run `python hardware_tests/ground_station_dashboard.py --bench --real-hardware --host 0.0.0.0`; verify worker health, state controls, graphs, telemetry preview, image sync, power, and PASS/WARN/FAIL summary
 - [ ] **Buzzer/LED test** - GPIO16 buzzer and GPIO26 LED verified after test script is added
 
 ## Software Integration Tests
@@ -34,13 +37,17 @@ Pre-flight and bring-up checklist for the Ground Mapping Payload.
 - [ ] **Fake mapping** - `python tests/test_fake_mapping.py` produces HTML + KML
 - [ ] **Full simulation** - `python tests/test_full_simulation.py` completes 30 s
 - [ ] **Main program** - `python main.py` runs all enabled modules; Ctrl+C clean shutdown
+- [ ] **Terminal test mode** - `python main.py --test-mode --real-hardware`; verify `garuda-test>` commands `state`, `next`, `auto on`, `auto off`, and clean `quit`
+- [ ] **Dashboard mock faults** - `python hardware_tests/ground_station_dashboard.py --mock`; verify fault toggles for GPS, IMU, barometer, camera, telemetry, logger, gimbal, low voltage, and high CPU temperature
+- [ ] **Diagnostics tests** - `python tests/test_diagnostics.py`
+- [ ] **Flight state tests** - `python tests/test_flight_state_machine.py`
 - [ ] Maps open in browser (`data/maps/flight_path.html`)
 - [ ] KML opens in Google Earth (`data/maps/flight_path.kml`)
 
 ## Field Tests
 
 - [ ] **Field walk test** - carry payload outdoors; verify GPS track and image geotags
-- [ ] LoRa telemetry received at expected rate on ground station
+- [ ] XBee telemetry received at expected rate on ground station
 - [ ] SD card has free space after 10-minute run
 - [ ] Gimbal stabilizes during gentle motion
 - [ ] AHRS source remains stable during gentle motion; no unexpected fallback transitions
@@ -53,5 +60,6 @@ Pre-flight and bring-up checklist for the Ground Mapping Payload.
 | Pi boot | | | | |
 | HAT power rails | | | | |
 | BNO085 I2C/AHRS | | | | |
+| Ground station test report | | | | |
 | Full simulation | | | | |
 | Field walk | | | | |

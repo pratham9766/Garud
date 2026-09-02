@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from abc import ABC, abstractmethod
 
 import config
@@ -80,12 +81,37 @@ def telemetry_worker(shared: SharedData, stop_event: threading.Event) -> None:
         while not stop_event.is_set():
             try:
                 snap = shared.get_snapshot()
+                sequence = snap.telemetry_sequence + 1
+                shared.update(telemetry_sequence=sequence)
+                snap = shared.get_snapshot()
                 packet = build_telemetry_packet(snap)
-                ok = radio.send(packet)
-                shared.update(telemetry_ok=ok)
+                ok = False if config.USE_MOCK_HARDWARE and shared.is_fault_active("telemetry_drop") else radio.send(packet)
+                if config.USE_MOCK_HARDWARE and shared.is_fault_active("telemetry_drop"):
+                    shared.record_event("TELEMETRY_LOSS", "Telemetry", "WARN", "Mock telemetry packet drop injected.", {"sequence": sequence})
+                shared.update(
+                    telemetry_ok=ok,
+                    telemetry_tx_count=snap.telemetry_tx_count + (1 if ok else 0),
+                    telemetry_last_tx_timestamp=time.time() if ok else snap.telemetry_last_tx_timestamp,
+                )
+                if ok:
+                    shared.record_worker_success(
+                        "Telemetry",
+                        expected_hz=config.TELEMETRY_EXPECTED_HZ,
+                        reason="Telemetry packet transmitted.",
+                        details={
+                            "sequence": sequence,
+                            "tx_count": snap.telemetry_tx_count + 1,
+                            "packet_bytes": len(packet.encode("utf-8")),
+                            "rssi": None,
+                            "snr": None,
+                        },
+                    )
+                else:
+                    shared.record_worker_error("Telemetry", "Radio send returned False.", expected_hz=config.TELEMETRY_EXPECTED_HZ)
             except Exception as exc:
                 logger.error("Telemetry send error: %s", exc)
                 shared.update(telemetry_ok=False, status="TELEM_ERROR")
+                shared.record_worker_error("Telemetry", exc, expected_hz=config.TELEMETRY_EXPECTED_HZ)
 
             stop_event.wait(config.TELEMETRY_INTERVAL_SEC)
     finally:

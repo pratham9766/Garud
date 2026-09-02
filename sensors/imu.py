@@ -179,15 +179,24 @@ def imu_worker(shared: SharedData, stop_event: threading.Event) -> None:
     except Exception as exc:
         logger.error("IMU init error: %s", exc)
         shared.update(imu_ok=False, status="IMU_INIT_ERROR")
+        shared.record_worker_error("IMU", exc, expected_hz=config.IMU_EXPECTED_HZ)
         return
     ahrs = AHRSManager()
     calibration = load_calibration()
+    last_source = ""
     logger.info("IMU worker started (mock=%s).", config.USE_MOCK_HARDWARE)
 
     try:
         while not stop_event.is_set():
             try:
+                if config.USE_MOCK_HARDWARE and shared.is_fault_active("freeze_imu"):
+                    shared.record_event("SENSOR_STALE", "IMU", "WARN", "Mock IMU freeze injected.")
+                    stop_event.wait(1.0 / config.AHRS_RATE_HZ)
+                    continue
                 reading = apply_imu_calibration(imu.read(), calibration)
+                if config.USE_MOCK_HARDWARE and shared.is_fault_active("imu_drift"):
+                    reading["roll"] = float(reading.get("roll", 0.0)) + 12.0
+                    reading["pitch"] = float(reading.get("pitch", 0.0)) - 8.0
                 raw = raw_from_reading(reading)
                 attitude = ahrs.update(raw)
                 raw_q = bno_xyzw_to_wxyz(*raw.bno_quaternion_xyzw) if raw.bno_quaternion_xyzw else None
@@ -221,9 +230,38 @@ def imu_worker(shared: SharedData, stop_event: threading.Event) -> None:
                     imu_ok=True,
                 )
                 shared.publish_attitude(attitude)
+                accel_mag = math.sqrt(sum(float(v) ** 2 for v in raw_accel))
+                gyro_mag = math.sqrt(sum(float(v) ** 2 for v in raw_gyro))
+                source = "MOCK" if config.USE_MOCK_HARDWARE else attitude.source
+                if last_source and source != last_source:
+                    shared.record_event(
+                        "AHRS_FALLBACK",
+                        "IMU",
+                        "WARN",
+                        f"Attitude source changed from {last_source} to {source}.",
+                    )
+                last_source = source
+                shared.record_worker_success(
+                    "IMU",
+                    expected_hz=config.IMU_EXPECTED_HZ,
+                    reason=f"Attitude source {source}; confidence {attitude.confidence}.",
+                    details={
+                        "ahrs_enabled": attitude.enabled,
+                        "attitude_source": source,
+                        "ahrs_valid": attitude.valid,
+                        "ahrs_healthy": attitude.healthy,
+                        "confidence": attitude.confidence,
+                        "accuracy_rad": raw_accuracy,
+                        "calibration_status": raw_calibration_status,
+                        "accel_magnitude_mps2": accel_mag,
+                        "gyro_magnitude_rads": gyro_mag,
+                        "sample_age_ms": attitude.sample_age_ms,
+                    },
+                )
             except Exception as exc:
                 logger.error("IMU read error: %s", exc)
                 shared.update(imu_ok=False, status="IMU_ERROR")
+                shared.record_worker_error("IMU", exc, expected_hz=config.IMU_EXPECTED_HZ)
 
             stop_event.wait(1.0 / config.AHRS_RATE_HZ)
     finally:

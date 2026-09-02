@@ -47,16 +47,25 @@ class MockGimbal(BaseGimbal):
     def point_down(self, attitude_roll: float, attitude_pitch: float, dt: float) -> dict:
         x_deflection = attitude_roll
         y_deflection = attitude_pitch
+        stepper_target = config.GIMBAL_STEPPER_HOME_DEG + config.GIMBAL_STEPPER_SIGN * x_deflection
+        servo_target = config.GIMBAL_SERVO_CENTER + config.GIMBAL_SERVO_SIGN * y_deflection
         self.set_angles(
-            config.GIMBAL_SERVO_SIGN * y_deflection,
-            config.GIMBAL_STEPPER_SIGN * x_deflection,
+            servo_target,
+            stepper_target,
         )
         return {
             "x_deflection_deg": x_deflection,
             "y_deflection_deg": y_deflection,
+            "stepper_target_deg": stepper_target,
+            "servo_target_deg": servo_target,
             "stepper_angle_deg": self._roll,
-            "servo_angle_deg": config.GIMBAL_SERVO_CENTER + self._pitch,
+            "servo_angle_deg": self._pitch,
+            "servo_physical_angle_deg": config.GIMBAL_SERVO_PHYSICAL_CENTER_DEG + self._pitch,
             "stepper_steps": 0,
+            "stepper_rate_limited": False,
+            "servo_rate_limited": False,
+            "stepper_saturated": stepper_target < config.GIMBAL_STEPPER_MIN_DEG or stepper_target > config.GIMBAL_STEPPER_MAX_DEG,
+            "servo_saturated": servo_target < config.GIMBAL_SERVO_MIN or servo_target > config.GIMBAL_SERVO_MAX,
         }
 
     def close(self) -> None:
@@ -85,8 +94,10 @@ class RealGimbal(BaseGimbal):
         )
         self._stepper_angle_deg = config.GIMBAL_STEPPER_HOME_DEG
         self._servo_angle_deg = config.GIMBAL_SERVO_CENTER
+        self._servo_physical_angle_deg = self._servo_physical_angle(self._servo_angle_deg)
         self._kit.servo[config.GIMBAL_SERVO_CHANNEL].set_pulse_width_range(500, 2500)
-        self._kit.servo[config.GIMBAL_SERVO_CHANNEL].angle = self._servo_angle_deg
+        self._kit.servo[config.GIMBAL_SERVO_CHANNEL].actuation_range = config.GIMBAL_SERVO_ACTUATION_RANGE_DEG
+        self._kit.servo[config.GIMBAL_SERVO_CHANNEL].angle = self._servo_physical_angle_deg
         logger.info(
             "Gimbal initialized: stepper=%s, servo axis=%s channel=%d at PCA9685 0x%02X.",
             config.GIMBAL_STEPPER_AXIS,
@@ -103,6 +114,16 @@ class RealGimbal(BaseGimbal):
         )
 
     @staticmethod
+    def _servo_physical_angle(logical_angle: float) -> float:
+        return max(
+            config.GIMBAL_SERVO_PHYSICAL_MIN_DEG,
+            min(
+                config.GIMBAL_SERVO_PHYSICAL_MAX_DEG,
+                config.GIMBAL_SERVO_PHYSICAL_CENTER_DEG + logical_angle,
+            ),
+        )
+
+    @staticmethod
     def _clamp(value: float, lower: float, upper: float) -> float:
         return max(lower, min(upper, value))
 
@@ -113,6 +134,7 @@ class RealGimbal(BaseGimbal):
         return value
 
     def _move_stepper_to(self, target_deg: float) -> int:
+        unclamped_target = target_deg
         target_deg = self._clamp(
             target_deg,
             config.GIMBAL_STEPPER_MIN_DEG,
@@ -133,7 +155,8 @@ class RealGimbal(BaseGimbal):
         pitch = self._clamp(pitch, config.GIMBAL_PITCH_MIN, config.GIMBAL_PITCH_MAX)
         roll = self._clamp(roll, config.GIMBAL_ROLL_MIN, config.GIMBAL_ROLL_MAX)
         self._servo_angle_deg = self._servo_angle(pitch)
-        self._kit.servo[config.GIMBAL_SERVO_CHANNEL].angle = self._servo_angle_deg
+        self._servo_physical_angle_deg = self._servo_physical_angle(self._servo_angle_deg)
+        self._kit.servo[config.GIMBAL_SERVO_CHANNEL].angle = self._servo_physical_angle_deg
         self._move_stepper_to(roll)
 
     def point_down(self, attitude_roll: float, attitude_pitch: float, dt: float) -> dict:
@@ -142,13 +165,15 @@ class RealGimbal(BaseGimbal):
 
         max_servo_step = config.GIMBAL_SERVO_RATE_LIMIT_DPS * max(dt, 0.0)
         max_stepper_step = config.GIMBAL_STEPPER_RATE_LIMIT_DPS * max(dt, 0.0)
+        raw_stepper_target = config.GIMBAL_STEPPER_HOME_DEG + config.GIMBAL_STEPPER_SIGN * x_deflection
+        raw_servo_target = config.GIMBAL_SERVO_CENTER + config.GIMBAL_SERVO_SIGN * y_deflection
         desired_stepper = self._clamp(
-            config.GIMBAL_STEPPER_HOME_DEG + config.GIMBAL_STEPPER_SIGN * x_deflection,
+            raw_stepper_target,
             self._stepper_angle_deg - max_stepper_step,
             self._stepper_angle_deg + max_stepper_step,
         )
         desired_servo = self._clamp(
-            config.GIMBAL_SERVO_CENTER + config.GIMBAL_SERVO_SIGN * y_deflection,
+            raw_servo_target,
             self._servo_angle_deg - max_servo_step,
             self._servo_angle_deg + max_servo_step,
         )
@@ -159,13 +184,21 @@ class RealGimbal(BaseGimbal):
             config.GIMBAL_SERVO_MIN,
             config.GIMBAL_SERVO_MAX,
         )
-        self._kit.servo[config.GIMBAL_SERVO_CHANNEL].angle = self._servo_angle_deg
+        self._servo_physical_angle_deg = self._servo_physical_angle(self._servo_angle_deg)
+        self._kit.servo[config.GIMBAL_SERVO_CHANNEL].angle = self._servo_physical_angle_deg
         return {
             "x_deflection_deg": x_deflection,
             "y_deflection_deg": y_deflection,
+            "stepper_target_deg": raw_stepper_target,
+            "servo_target_deg": raw_servo_target,
             "stepper_angle_deg": self._stepper_angle_deg,
             "servo_angle_deg": self._servo_angle_deg,
+            "servo_physical_angle_deg": self._servo_physical_angle_deg,
             "stepper_steps": stepper_steps,
+            "stepper_rate_limited": abs(desired_stepper - raw_stepper_target) > 1e-6,
+            "servo_rate_limited": abs(desired_servo - raw_servo_target) > 1e-6,
+            "stepper_saturated": raw_stepper_target < config.GIMBAL_STEPPER_MIN_DEG or raw_stepper_target > config.GIMBAL_STEPPER_MAX_DEG,
+            "servo_saturated": raw_servo_target < config.GIMBAL_SERVO_MIN or raw_servo_target > config.GIMBAL_SERVO_MAX,
         }
 
     def close(self) -> None:

@@ -95,6 +95,7 @@ class GPSM8N:
                     "fixed": fix >= 1,
                     "fix": fix,
                     "satellites": int(fields[7]),
+                    "hdop": float(fields[8]) if fields[8] else None,
                     "lat": lat,
                     "lon": lon,
                     "altitude_m": float(fields[9]) if fields[9] else None,
@@ -111,6 +112,8 @@ class GPSM8N:
                     "lat": lat,
                     "lon": lon,
                     "altitude_m": None,
+                    "ground_speed_mps": float(fields[7]) * 0.514444 if fields[7] else None,
+                    "course_deg": float(fields[8]) if fields[8] else None,
                 }
             except (IndexError, ValueError):
                 return None

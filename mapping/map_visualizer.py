@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from datetime import datetime
 
 import folium
 import pandas as pd
@@ -131,7 +132,12 @@ def generate_flight_map(
     fmap.get_root().html.add_child(folium.Element(summary_html))
     folium.LayerControl().add_to(fmap)
 
-    fmap.save(str(output_path))
+    try:
+        fmap.save(str(output_path))
+    except PermissionError:
+        fallback_name = f"{output_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{output_path.suffix}"
+        output_path = output_path.with_name(fallback_name)
+        fmap.save(str(output_path))
     logger.info("Flight map saved: %s", output_path)
     return output_path
 
