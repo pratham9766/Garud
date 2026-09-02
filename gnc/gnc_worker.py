@@ -148,6 +148,7 @@ class FlightComputer:
         self._HeadingPID = _HeadingPID
         self._StateMachine = _StateMachine
         self.FlightState = _FlightState
+        self._StateSnapshot = StateSnapshot
         self._STATE_WRITE_INTERVAL_S = STATE_WRITE_INTERVAL_S
         self._write_state = write_state
         self._load_state = load_state
@@ -156,12 +157,8 @@ class FlightComputer:
 
         self.shared = shared
         self.dt = 0.05  # 20 Hz loop
-        self.use_simulator = use_simulator
+        self.use_simulator = use_simulator if shared is None else False
 
-        if self.use_simulator:
-            log.info("--> Software-In-The-Loop (SITL) Mode ACTIVE")
-            from sim.dynamics import GliderDynamics
-            from sim.wind_model import WindModel
         if self.shared is not None:
             # ---------------------------------------------------------------
             # Garuda_TARSR INTEGRATED mode — hardware is managed by the
@@ -290,7 +287,7 @@ class FlightComputer:
         # Boot-time reset recovery
         # ---------------------------------------------------------------
         if not self.use_simulator:
-            snapshot = load_state()
+            snapshot = self._load_state()
             if snapshot is not None:
                 log.warning("[RECOVERY] Resuming from .state: state=%s  drogue=%s  alt=%.1f m",
                             snapshot.flight_state, snapshot.drogue_fired,
@@ -412,7 +409,7 @@ class FlightComputer:
         """Write current flight state to .state file for reset recovery."""
         try:
             sm = self.state_machine
-            snapshot = StateSnapshot(
+            snapshot = self._StateSnapshot(
                 flight_state      = sm.state.name,
                 ground_altitude_m = sm.ground_altitude,
                 drogue_fired      = sm.drogue_fired,
@@ -422,7 +419,7 @@ class FlightComputer:
                 target_lon        = self.target_y * 1e-5,
                 rl_active         = self.rl_active,
             )
-            write_state(snapshot)
+            self._write_state(snapshot)
         except Exception as e:
             log.warning("[STATE] Failed to write snapshot: %s", e)
 
@@ -467,7 +464,7 @@ class FlightComputer:
 
             # -- Periodic .state write (every STATE_WRITE_INTERVAL_S seconds)
             now = time.time()
-            if not self.use_simulator and (now - self._last_state_write) >= STATE_WRITE_INTERVAL_S:
+            if not self.use_simulator and (now - self._last_state_write) >= self._STATE_WRITE_INTERVAL_S:
                 self._write_state_snapshot()
                 self._last_state_write = now
             # 1. Read Sensors
@@ -507,7 +504,7 @@ class FlightComputer:
             right_servo = 90.0
             controller_used = "NEUTRAL"
 
-            if state == FlightState.GUIDED_DESCENT:
+            if state == self.FlightState.GUIDED_DESCENT:
                 aim_x = self.target_x
                 aim_y = self.target_y
                 target_bearing = math.atan2(aim_y - curr_y, aim_x - curr_x)
