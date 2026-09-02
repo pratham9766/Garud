@@ -13,6 +13,8 @@ import logging
 import signal
 import sys
 import time
+import argparse
+import multiprocessing
 from pathlib import Path
 
 # Ensure project root is on sys.path when run as script
@@ -26,6 +28,7 @@ from core.health_monitor import health_monitor_loop
 from core.mission_state import MissionState, next_state
 from core.shared_data import SharedData
 from core.thread_manager import ManagedThread, ThreadManager
+from gnc.gnc_worker import FlightComputer
 from gimbal.gimbal_stabilizer import gimbal_worker
 from logging_system.data_logger import DataLogger, logger_worker
 from mapping.kml_generator import generate_kml
@@ -53,42 +56,24 @@ def ensure_directories() -> None:
         logger.debug("Directory ready: %s", path)
 
 
-def run_mission_state_machine(shared: SharedData, stop_event) -> None:
+def camera_ipc_bridge(shared: SharedData, cam_dict: dict, stop_event) -> None:
     """
-    Advance mission states on a simple timer schedule.
-
-    BOOT (0s) -> IDLE (3s) -> DESCENT (8s) -> LANDED (when altitude ~ 0 or timeout)
+    Main thread loop: polls the multiprocessing dict for camera updates
+    and pushes them into SharedData.
     """
-    logger.info("Mission state machine started.")
-    shared.update(state=MissionState.BOOT.value, status="OK")
-    time.sleep(2.0)
-
-    if stop_event.is_set():
-        return
-
-    # BOOT -> IDLE
-    shared.update(state=MissionState.IDLE.value)
-    logger.info("Mission state: IDLE")
-    time.sleep(3.0)
-
-    if stop_event.is_set():
-        return
-
-    # IDLE -> DESCENT
-    shared.update(state=MissionState.DESCENT.value)
-    logger.info("Mission state: DESCENT")
-    shared.start_mission_clock()
-
-    # Stay in DESCENT until landed or stopped
+    logger.info("Camera IPC Bridge started.")
     while not stop_event.is_set():
-        snap = shared.get_snapshot()
-        if snap.baro_altitude <= 5.0 and snap.mission_time > 10.0:
-            shared.update(state=MissionState.LANDED.value, status="OK")
-            logger.info("Mission state: LANDED (altitude %.1f m)", snap.baro_altitude)
-            break
-        time.sleep(1.0)
-
-    logger.info("Mission state machine finished.")
+        if "image_name" in cam_dict and "image_timestamp" in cam_dict:
+            # We don't want to constantly update SharedData if it hasn't changed, 
+            # so we check the timestamp.
+            snap = shared.get_snapshot()
+            if snap.image_timestamp != cam_dict["image_timestamp"]:
+                shared.update(
+                    image_name=cam_dict["image_name"],
+                    image_timestamp=cam_dict["image_timestamp"]
+                )
+        time.sleep(0.1)
+    logger.info("Camera IPC Bridge finished.")
 
 
 def generate_outputs(log_path: Path) -> None:
@@ -151,6 +136,14 @@ def log_terminal_snapshot(shared: SharedData) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="GARUDA Ground Mapping Payload & GNC")
+    parser.add_argument("--drop-height", type=float, default=0.0, help="Simulate a drop test from this height in meters")
+    parser.add_argument("--mock", action="store_true", help="Force mock hardware mode (useful for testing on PC)")
+    args = parser.parse_args()
+
+    if args.mock:
+        config.USE_MOCK_HARDWARE = True
+
     setup_logging()
     ensure_directories()
 
@@ -164,10 +157,16 @@ def main() -> None:
     data_logger: DataLogger | None = None
     global_stop = False
 
+    manager = multiprocessing.Manager()
+    cam_dict = manager.dict()
+    cam_process = None
+    cam_stop_event = multiprocessing.Event()
+
     def handle_signal(signum, frame):
         nonlocal global_stop
         logger.info("Shutdown signal received (Ctrl+C).")
         global_stop = True
+        cam_stop_event.set()
 
     signal.signal(signal.SIGINT, handle_signal)
     if hasattr(signal, "SIGTERM"):
@@ -187,9 +186,11 @@ def main() -> None:
             ManagedThread("Barometer", lambda evt: barometer_worker(shared, evt))
         )
     if config.ENABLE_CAMERA:
-        thread_mgr.register(
-            ManagedThread("Camera", lambda evt: camera_worker(shared, evt))
+        cam_process = multiprocessing.Process(
+            target=camera_worker, args=(cam_dict, cam_stop_event)
         )
+        cam_process.start()
+        logger.info("Started multiprocessing.Process for Camera")
     if config.ENABLE_GIMBAL:
         thread_mgr.register(
             ManagedThread("Gimbal", lambda evt: gimbal_worker(shared, evt))
@@ -198,6 +199,11 @@ def main() -> None:
         thread_mgr.register(
             ManagedThread("Telemetry", lambda evt: telemetry_worker(shared, evt))
         )
+
+    fc = FlightComputer(shared, drop_height=args.drop_height)
+    thread_mgr.register(
+        ManagedThread("GNC", lambda evt: fc.run(evt))
+    )
 
     if config.ENABLE_LOGGING:
         data_logger = DataLogger(shared)
@@ -219,7 +225,6 @@ def main() -> None:
     # Start all workers
     thread_mgr.start_all()
 
-    # Run mission state machine in main thread
     class _StopProxy:
         def is_set(self):
             return global_stop
@@ -232,23 +237,35 @@ def main() -> None:
                 "Mission state transitions paused for setup verification. "
                 "Press Ctrl+C to stop."
             )
-        else:
-            run_mission_state_machine(shared, _StopProxy())
-
-        # If not interrupted, keep running until LANDED or user stops
-        while not global_stop:
-            snap = shared.get_snapshot()
-            if config.PAUSE_STATE_TRANSITIONS:
+            
+            # Bench verification loop
+            while not global_stop:
                 log_terminal_snapshot(shared)
-            elif snap.state == MissionState.LANDED.value:
-                logger.info("Mission complete — press Ctrl+C to exit and generate maps.")
-            time.sleep(1.0)
+                time.sleep(1.0)
+        else:
+            if config.ENABLE_CAMERA:
+                camera_ipc_bridge(shared, cam_dict, _StopProxy())
+            else:
+                while not global_stop:
+                    snap = shared.get_snapshot()
+                    if snap.state == MissionState.LANDED.value:
+                        logger.info("Mission complete — press Ctrl+C to exit and generate maps.")
+                    time.sleep(1.0)
 
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt.")
     finally:
-        logger.info("Stopping all threads...")
+        logger.info("Stopping all threads and processes...")
+        global_stop = True
+        cam_stop_event.set()
+        
         thread_mgr.stop_all()
+
+        if cam_process:
+            cam_process.join(timeout=2.0)
+            if cam_process.is_alive():
+                logger.warning("Terminating camera process forcefully.")
+                cam_process.terminate()
 
         if data_logger:
             data_logger.close()

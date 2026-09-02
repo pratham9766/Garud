@@ -82,6 +82,14 @@ class PayloadSnapshot:
     imu_ok: bool = False
     barometer_ok: bool = False
     telemetry_ok: bool = False
+    
+    # GNC fields
+    servo_left: float = 90.0
+    servo_right: float = 90.0
+    servo_drogue: float = 60.0
+    heading_cmd: float = 0.0
+    roll_cmd: float = 0.0
+    pitch_cmd: float = 0.0
 
 
 class SharedData:
@@ -100,7 +108,8 @@ class SharedData:
         "raw_imu_calibration_status,raw_baro_pressure_hpa,"
         "raw_baro_temperature_c,gimbal_x_deflection_deg,gimbal_y_deflection_deg,"
         "gimbal_stepper_angle_deg,gimbal_servo_angle_deg,gimbal_stepper_steps,"
-        "gimbal_ok"
+        "gimbal_ok,"
+        "servo_left,servo_right,servo_drogue,heading_cmd,roll_cmd,pitch_cmd"
     )
 
     def __init__(self) -> None:

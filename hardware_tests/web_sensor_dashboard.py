@@ -312,7 +312,7 @@ def main() -> int:
     parser.add_argument("--duration", type=float, default=0.0, help="Optional duration for smoke tests; 0 runs until Ctrl+C.")
     args = parser.parse_args()
 
-    config.USE_MOCK_HARDWARE = False
+    config.USE_MOCK_HARDWARE = True
     state = DashboardState(args.mode.upper(), args.camera_interval)
     stop = threading.Event()
     threads = [

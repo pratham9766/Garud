@@ -1,0 +1,148 @@
+# PID Gains and Parameters for Glider GNC
+
+# 1. Gain Scheduling (Adaptive Control)
+gain_schedules:
+  cruise:
+    min_alt_agl: 200.0
+    heading_kp: 5.0
+    heading_ki: 0.05
+    heading_kd: 0.5
+  approach:
+    min_alt_agl: 50.0
+    heading_kp: 10.0
+    heading_ki: 0.1
+    heading_kd: 1.0
+  final:
+    min_alt_agl: 0.0
+    heading_kp: 20.0
+    heading_ki: 0.2
+    heading_kd: 2.0
+
+  integral_limit: 10.0
+
+# 3. L1 Lateral Guidance
+l1_guidance:
+  period: 20.0           # L1 period in seconds (tunable)
+  damping: 0.7           # L1 damping ratio
+  max_bank_angle_deg: 35.0 # hard limit on commanded bank angle
+
+# 4. Airframe Parameters
+airframe:
+  glide_ratio: 5.0       # Va / Vsink
+  nominal_airspeed: 15.0 # m/s (Va)
+  turn_rate_constant: 1.0 # arbitrary scaling if needed
+
+# 5. Servo Constraints
+servos:
+  min_pwm_deg: 60.0
+  max_pwm_deg: 120.0
+  neutral_deg: 90.0
+  left_elevon_trim: 0.0
+  right_elevon_trim: 0.0
+
+# 6. Estimation Parameters
+estimation:
+  attitude_alpha: 0.98   # Complementary filter alpha
+  wind_rls_lambda: 0.98  # Recursive Least Squares forgetting factor
+
+# 7. Altitude Budget
+altitude_budget:
+  s_turn_excess_threshold: 15.0 # meters of excess alt to trigger S-turns
+  s_turn_bank_angle_deg: 20.0   # bank angle to command during S-turns
+
+# 8. Loop Timing
+timing:
+  target_hz: 20
+
+# 9. Telemetry / Sensor Health
+telemetry:
+  gps_staleness_timeout_ms: 500  # PID fallback engages if GPS not updated within this window
+
+# 10. RL Policy
+rl:
+  onnx_model_path: models/sac_policy_6500000_16D.onnx
+  obs_dim: 16
+  action_dim: 2
+  inference_timeout_ms: 5        # Watchdog: fallback if single inference exceeds this
+
+# 11. Hardware Configuration (confirmed from GARUD HAT schematic Rev 2, 2026-08-04)
+hardware:
+
+  # --- SPI bus (SPI0: SCLK=GPIO11, MOSI=GPIO10, MISO=GPIO9) ---
+  # Both BNO085 and BMP388 share SPI0. Each has its own software CS pin.
+  # BNO085 -- SPI (NOT I2C -- confirmed from schematic)
+  bno085_cs_pin:    5    # CS_BNO  -> GPIO5  / Pi Pin 29
+  bno085_rst_pin:   6    # RST_BNO -> GPIO6  / Pi Pin 31
+  bno085_int_pin:   27   # INT_BNO -> GPIO27 / Pi Pin 13
+  bno085_refresh_hz: 10
+
+  # BMP388 -- SPI (CS on GPIO22, NOT CE0/GPIO8)
+  bmp388_cs_pin:    22   # CS_BMP  -> GPIO22 / Pi Pin 15
+  bmp388_int_pin:   17   # INT_BMP -> GPIO17 / Pi Pin 11
+
+  # --- I2C bus (SDA=GPIO2 Pin3, SCL=GPIO3 Pin5) ---
+  # INA219 and PCA9685 share the I2C bus.
+  # ADDRESS CONFLICT RESOLVED: one must be jumpered -- confirm from physical board.
+  i2c_addresses:
+    ina219:  0x41   # INA219: ADDR pin to VCC -> 0x41
+    pca9685: 0x40   # PCA9685: A0-A5 all GND -> 0x40
+
+  # PCA9685 output enable (active LOW)
+  pca9685_oe_pin: 4      # OE_Servo -> GPIO4 / Pi Pin 7
+
+  # --- UART: XBee 2.4 GHz telemetry (GPIO14=RX, GPIO15=TX) ---
+  # GPS is on SPI so ttyAMA0 is free for XBee.
+  # Prerequisite: disable Bluetooth so ttyAMA0 is available:
+  #   Add to /boot/config.txt:  dtoverlay=disable-bt
+  #   sudo systemctl disable hciuart
+  xbee_port:           "/dev/ttyAMA0"   # GPIO14=RX / GPIO15=TX (hardware UART)
+  xbee_baudrate:       9600
+  xbee_pan_id:         0x1001           # Team 002 PAN ID
+  xbee_channel_main:   11               # Ch 11 = 2405 MHz (Team 002 Main)
+  xbee_channel_backup: 21               # Ch 21 = 2455 MHz (Team 002 Backup)
+  xbee_active_channel: "main"
+
+  # --- LoRa E22 (if fitted -- NOT used, XBee is the active telemetry link) ---
+  # Pins are documented here for reference from schematic only.
+  # RX_Lora=GPIO14, TX_Lora=GPIO15, M0=GPIO23, M1=GPIO24, AUX_Lora=GPIO25
+  # lora_m0_pin:  23
+  # lora_m1_pin:  24
+  # lora_aux_pin: 25
+
+  # --- Buzzer ---
+  buzzer_gpio_pin: 16    # GPIO16 -> 220 ohm -> 2N2219 transistor -> BZ1
+
+  # --- Competition safety ---
+  telemetry_auto_shutoff_minutes: 90
+
+
+
+# 12. PCA9685 Servo Channel Map
+# No hardcoded channel numbers in any other file -- always read from here.
+servo_channels:
+  glider_left:    0    # EMAX ES3004 -- left brake (asymmetric)
+  glider_right:   1    # EMAX ES3004 -- right brake (asymmetric)
+  drogue_release: 2    # EMAX ES3004 -- drogue release at 600m AGL
+  gimbal_roll:    3    # MG90   -- gimbal roll stabilisation
+  gimbal_pitch:   4    # MG90   -- gimbal pitch stabilisation
+
+# 13. Servo PWM Parameters
+# PCA9685 outputs 50 Hz PWM. Pulse widths below are microsecond values.
+servo_pwm:
+  mg995r:                  # Glider brake servos + drogue release
+    freq_hz:  50
+    min_us:   1000          # 60 deg position (full brake)
+    mid_us:   1500          # 90 deg neutral
+    max_us:   2000          # 120 deg position (released)
+  sg90:                    # Gimbal servos
+    freq_hz:  50
+    min_us:   500           # -45 deg (mapped to 45 deg servo angle)
+    mid_us:   1500          # 0 deg (centre / camera level)
+    max_us:   2400          # +45 deg (mapped to 135 deg servo angle)
+
+# 14. Mission Target
+# Update these coordinates before every flight to the actual landing zone.
+# The flight computer reads these at startup -- no code changes needed on launch day.
+mission:
+  target_latitude:  18.653862   # Decimal degrees -- update before flight!
+  target_longitude: 73.762826   # Decimal degrees -- update before flight!

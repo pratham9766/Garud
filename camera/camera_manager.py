@@ -22,11 +22,9 @@ def create_camera():
     return RealCamera()
 
 
-def camera_worker(shared: SharedData, stop_event: threading.Event) -> None:
+def camera_worker(cam_dict: dict, stop_event) -> None:
     """
-    Background thread: capture images at IMAGE_CAPTURE_INTERVAL_SEC.
-
-    Updates shared.image_name and shared.camera_ok on each capture.
+    Background process: capture images at IMAGE_CAPTURE_INTERVAL_SEC.
     """
     try:
         camera = create_camera()
@@ -39,20 +37,20 @@ def camera_worker(shared: SharedData, stop_event: threading.Event) -> None:
     try:
         while not stop_event.is_set():
             try:
-                snap = shared.get_snapshot()
-                filename = camera.capture(
-                    latitude=snap.latitude,
-                    longitude=snap.longitude,
-                )
-                shared.update(
-                    image_name=filename,
-                    image_timestamp=time.time(),
-                    camera_ok=True,
-                )
+                lat = cam_dict.get("latitude", 0.0)
+                lon = cam_dict.get("longitude", 0.0)
+                
+                filename = camera.capture(latitude=lat, longitude=lon)
+                
+                cam_dict["image_name"] = filename
+                cam_dict["image_timestamp"] = time.time()
+                cam_dict["camera_ok"] = True
+                
                 logger.info("Image captured: %s", filename)
             except Exception as exc:
                 logger.error("Camera capture error: %s", exc)
-                shared.update(camera_ok=False, status="CAMERA_ERROR")
+                cam_dict["camera_ok"] = False
+                cam_dict["status"] = "CAMERA_ERROR"
 
             stop_event.wait(config.IMAGE_CAPTURE_INTERVAL_SEC)
     finally:
