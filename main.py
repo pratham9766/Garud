@@ -86,11 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--drop-height",
         type=float,
-        default=0.0,
+        default=50.0,
         metavar="METERS",
         help="Height above ground (meters) at which the software is started. "
              "Use when booting on a rooftop or elevated position so the barometer "
-             "baseline is corrected to true ground level. Example: --drop-height 36",
+             "baseline is corrected to true ground level. Example: --drop-height 50",
     )
 
     for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping", "navigation_estimator", "glider_servos"):
