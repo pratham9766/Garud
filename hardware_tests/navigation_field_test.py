@@ -3,6 +3,9 @@
 Run on Raspberry Pi with real sensors:
   python hardware_tests/navigation_field_test.py --seconds 60
 
+Run on a development machine with synthetic sensors:
+  python hardware_tests/navigation_field_test.py --mock --seconds 10
+
 This script records raw GPS and estimated navigation scatter/drift evidence. It
 does not command servos or modify guidance behavior.
 """
@@ -71,6 +74,7 @@ def _update_from_sensors(shared: SharedData, gps, barometer, imu, ahrs: AHRSMana
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--mock", action="store_true", help="Use synthetic GPS/barometer/IMU readings.")
     parser.add_argument("--seconds", type=float, default=60.0)
     parser.add_argument("--rate", type=float, default=config.NAVIGATION_RATE_HZ)
     parser.add_argument("--simulate-gps-loss-after", type=float, default=0.0)
@@ -78,7 +82,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=config.LOG_SAVE_PATH / "hardware_tests" / "navigation_field_test.csv")
     args = parser.parse_args()
 
-    config.USE_MOCK_HARDWARE = False
+    config.USE_MOCK_HARDWARE = bool(args.mock)
     shared = SharedData()
     estimator = NavigationEstimator()
     ahrs = AHRSManager()

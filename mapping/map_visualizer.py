@@ -7,11 +7,16 @@ Reads CSV log and writes data/maps/flight_path.html.
 from __future__ import annotations
 
 import logging
+from html import escape
 from pathlib import Path
 from datetime import datetime
 
-import folium
 import pandas as pd
+
+try:
+    import folium
+except ImportError:  # pragma: no cover - exercised in lean runtime installs
+    folium = None
 
 import config
 from mapping.coverage import build_image_footprints, estimate_coverage_area
@@ -48,6 +53,9 @@ def generate_flight_map(
     df = pd.read_csv(csv_path)
     if df.empty:
         raise ValueError(f"CSV log is empty: {csv_path}")
+
+    if folium is None:
+        return _generate_basic_html_map(df, output_path)
 
     # Centre map on mean coordinates
     center_lat = df["latitude"].mean()
@@ -140,6 +148,88 @@ def generate_flight_map(
         fmap.save(str(output_path))
     logger.info("Flight map saved: %s", output_path)
     return output_path
+
+
+def _write_text_with_fallback(output_path: Path, content: str) -> Path:
+    try:
+        output_path.write_text(content, encoding="utf-8")
+        return output_path
+    except PermissionError:
+        fallback_name = f"{output_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{output_path.suffix}"
+        fallback_path = output_path.with_name(fallback_name)
+        fallback_path.write_text(content, encoding="utf-8")
+        return fallback_path
+
+
+def _generate_basic_html_map(df: pd.DataFrame, output_path: Path) -> Path:
+    """Generate a dependency-light map report when folium is unavailable."""
+    footprints = build_image_footprints(df)
+    coverage = estimate_coverage_area(footprints)
+    path_rows = []
+    for _, row in df.iterrows():
+        path_rows.append(
+            "<tr>"
+            f"<td>{escape(str(row.get('timestamp', '')))}</td>"
+            f"<td>{float(row['latitude']):.7f}</td>"
+            f"<td>{float(row['longitude']):.7f}</td>"
+            f"<td>{float(row.get('altitude', row.get('baro_altitude', 0.0))):.2f}</td>"
+            f"<td>{escape(str(row.get('image_name', '')))}</td>"
+            "</tr>"
+        )
+
+    footprint_rows = []
+    for footprint in footprints:
+        footprint_rows.append(
+            "<tr>"
+            f"<td>{escape(footprint.image_name)}</td>"
+            f"<td>{footprint.altitude_m:.1f}</td>"
+            f"<td>{footprint.width_m:.1f}</td>"
+            f"<td>{footprint.height_m:.1f}</td>"
+            f"<td>{footprint.area_m2:.0f}</td>"
+            "</tr>"
+        )
+
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GARUDA Flight Map Report</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 24px; color: #17212b; }}
+    h1, h2 {{ margin-bottom: 8px; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 12px 0 28px; }}
+    th, td {{ border: 1px solid #cbd5df; padding: 6px 8px; text-align: left; }}
+    th {{ background: #eef3f8; }}
+    .summary {{ display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; max-width: 760px; }}
+    .metric {{ border: 1px solid #cbd5df; padding: 10px; border-radius: 6px; }}
+    .metric b {{ display: block; font-size: 12px; color: #536579; }}
+  </style>
+</head>
+<body>
+  <h1>GARUDA Flight Map Report</h1>
+  <p>Generated without folium; this report preserves path and footprint data for simulation checks.</p>
+  <div class="summary">
+    <div class="metric"><b>Images</b>{coverage['image_count']}</div>
+    <div class="metric"><b>Unique coverage</b>{coverage['unique_area_m2']:.0f} m^2</div>
+    <div class="metric"><b>Overlap estimate</b>{coverage['overlap_area_m2']:.0f} m^2</div>
+    <div class="metric"><b>Grid</b>{coverage['coverage_grid_m']:.1f} m</div>
+  </div>
+  <h2>Flight Path Samples</h2>
+  <table>
+    <thead><tr><th>Timestamp</th><th>Latitude</th><th>Longitude</th><th>Altitude m</th><th>Image</th></tr></thead>
+    <tbody>{''.join(path_rows)}</tbody>
+  </table>
+  <h2>Image Footprints</h2>
+  <table>
+    <thead><tr><th>Image</th><th>Altitude m</th><th>Width m</th><th>Height m</th><th>Area m^2</th></tr></thead>
+    <tbody>{''.join(footprint_rows)}</tbody>
+  </table>
+</body>
+</html>
+"""
+    saved_path = _write_text_with_fallback(output_path, html)
+    logger.info("Basic flight map report saved: %s", saved_path)
+    return saved_path
 
 
 if __name__ == "__main__":
