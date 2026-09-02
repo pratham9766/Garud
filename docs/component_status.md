@@ -11,7 +11,7 @@ Track hardware arrival, assembly, and software integration status.
 | BMP388 barometer | [ ] | [ ] | [ ] | [ ] | `RealBarometer` BMP388 SPI path | SPI: `CS_BMP` on GPIO8 |
 | BNO085 IMU/AHRS | [ ] | [ ] | [ ] | [ ] | `RealIMU` I2C driver path plus AHRS manager | I2C1: GPIO2/GPIO3, address `0x4A` |
 | PCA9685 servo controller | [ ] | [ ] | [ ] | [ ] | `adafruit_servokit` hardware tests | I2C, `OE_Servo` on GPIO4 |
-| 2-axis servo gimbal | [ ] | [ ] | [ ] | [ ] | `RealGimbal` stub | PCA9685 channels in `config.py` |
+| 2-axis servo gimbal | [ ] | [ ] | [ ] | [ ] | `RealGimbal` command path | Stepper limited to one revolution; servo command range `-180..+180` |
 | ULN2003 stepper | [ ] | [ ] | [ ] | [ ] | legacy bench driver | GPIO25/24/23/18 |
 | XBee telemetry module | [ ] | [ ] | [ ] | [ ] | `RealTelemetry` serial path | `/dev/ttyAMA0` at 9600 baud |
 | INA219 current sensor | [ ] | [ ] | [ ] | [ ] | `power_worker` adapter pending hardware address | I2C address must be confirmed in `config.py` |

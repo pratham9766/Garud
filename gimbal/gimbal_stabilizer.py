@@ -67,6 +67,7 @@ def gimbal_worker(shared: SharedData, stop_event: threading.Event) -> None:
                         "servo_target_deg": command.get("servo_target_deg"),
                         "stepper_command_deg": command["stepper_angle_deg"],
                         "servo_command_deg": command["servo_angle_deg"],
+                        "servo_physical_angle_deg": command.get("servo_physical_angle_deg"),
                         "stepper_steps": command["stepper_steps"],
                         "saturated": saturated,
                         "rate_limited": rate_limited,

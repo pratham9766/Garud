@@ -86,7 +86,7 @@ button:hover { background: #2b3543; }
 .tabs { display: flex; gap: 6px; padding: 8px 12px 0; flex-wrap: wrap; }
 .tab.active { background: #334155; border-color: #607089; }
 .view { display: none; }
-.view.active { display: block; }
+.view.active { display: block; grid-column: 1 / -1; }
 .pill {
   border: 1px solid #394556;
   border-radius: 999px;
@@ -512,7 +512,7 @@ async function refresh() {
   document.getElementById("roll").textContent = fmt(s.roll, 2, " deg");
   document.getElementById("pitch").textContent = fmt(s.pitch, 2, " deg");
   document.getElementById("yaw").textContent = fmt(s.yaw, 2, " deg");
-  document.getElementById("gimbal").textContent = `stepper ${fmt(s.gimbal.stepper, 1, " deg")} | servo ${fmt(s.gimbal.servo, 1, " deg")} | steps ${s.gimbal.steps}`;
+  document.getElementById("gimbal").textContent = `stepper ${fmt(s.gimbal.stepper, 1, " deg")} | servo cmd ${fmt(s.gimbal.servo, 1, " deg")} | steps ${s.gimbal.steps}`;
   const gpsDetails = s.health.gps.details || {};
   document.getElementById("gps").textContent = `${gpsDetails.fix_type || "N/A"} | sats ${gpsDetails.satellites ?? "N/A"} | HDOP ${gpsDetails.hdop ?? "N/A"} | lat ${fmt(s.latitude, 6)} | lon ${fmt(s.longitude, 6)} | GPS MSL ${fmt(s.gps_altitude, 1, " m")}`;
   document.getElementById("raw").textContent = `gyro ${s.raw.gyro.map(v => fmt(v, 3)).join(", ")} | accel ${s.raw.accel.map(v => fmt(v, 2)).join(", ")} | mag ${s.raw.mag.map(v => fmt(v, 2)).join(", ")}`;

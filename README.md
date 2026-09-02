@@ -430,6 +430,11 @@ is run. It shows state controls, event-marked graphs, worker health,
 PASS/WARN/FAIL verification, mock-only fault injection, and saved test reports
 under `data/logs/test_reports/`.
 
+Gimbal safety is enforced in software: the stepper is clamped to `-180..+180`
+degrees from home so it cannot rotate beyond one full revolution and tangle
+wires. The servo uses logical `-180..+180` degree commands, which `RealGimbal`
+maps to the configured PCA9685 physical angle range before sending PWM.
+
 The mapping, logging, telemetry, and post-flight processing pipelines are kept
 independent of the hardware adapters. Mock classes remain only for local
 development tests and CI-style checks.

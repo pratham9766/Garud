@@ -457,6 +457,17 @@ high_cpu_temperature
 In real hardware mode, unsupported metrics are shown as unavailable or disabled
 instead of being invented.
 
+Gimbal safety limits:
+
+```text
+Stepper travel: -180 deg to +180 deg from home, one full revolution total.
+Servo command:  -180 deg to +180 deg logical command.
+```
+
+The stepper limit is a hard wire-wrap protection; commands beyond this range
+are clamped and reported as gimbal saturation. The servo command is converted
+inside `RealGimbal` to the PCA9685 physical angle range before actuation.
+
 ## 12. Mapping Algorithm
 
 For every row with valid latitude, longitude, and `image_name`, the mapper:

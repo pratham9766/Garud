@@ -49,6 +49,9 @@ Raspberry Pi 4 and GARUDA HAT connections for the Ground Mapping Payload.
 | Ground | Common GND |
 
 Use `hardware_tests/test_servo_real.py` for one channel and `hardware_tests/test_gimbal_real.py` for the 2-axis sweep.
+The stepper axis is software-limited to `-180..+180` degrees from home to avoid
+wire tangling. The servo axis uses logical `-180..+180` degree commands and is
+mapped to the configured PCA9685 physical angle range by `RealGimbal`.
 
 ## ULN2003 Stepper
 
