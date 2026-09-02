@@ -232,6 +232,7 @@ th { color: #98a6b8; font-weight: 650; }
           <div class="card"><div class="label">Roll</div><div class="value" id="roll">--</div></div>
           <div class="card"><div class="label">Pitch</div><div class="value" id="pitch">--</div></div>
           <div class="card"><div class="label">Yaw</div><div class="value" id="yaw">--</div></div>
+          <div class="card"><div class="label">Gimbal</div><div class="small" id="gimbal">--</div></div>
           <div class="card wide"><div class="label">Transition Reason</div><div class="small" id="transitionReason">--</div></div>
           <div class="card wide"><div class="label">Subsystem Health</div><div class="status-row" id="health"></div></div>
           <div class="card wide"><div class="label">Verification Summary</div><div class="status-row" id="verificationSummary"></div></div>
@@ -620,7 +621,8 @@ async function refresh() {
   document.getElementById("roll").textContent = fmt(s.roll, 2, " deg");
   document.getElementById("pitch").textContent = fmt(s.pitch, 2, " deg");
   document.getElementById("yaw").textContent = fmt(s.yaw, 2, " deg");
-  document.getElementById("gimbal").textContent = `stepper ${fmt(s.gimbal.stepper, 1, " deg")} | servo cmd ${fmt(s.gimbal.servo, 1, " deg")} | steps ${s.gimbal.steps}`;
+  const gimbalCard = document.getElementById("gimbal");
+  if (gimbalCard) gimbalCard.textContent = `stepper ${fmt(s.gimbal.stepper, 1, " deg")} | servo cmd ${fmt(s.gimbal.servo, 1, " deg")} | steps ${s.gimbal.steps}`;
   const gpsDetails = s.health.gps.details || {};
   document.getElementById("gps").textContent = `${s.gps.fix_type || gpsDetails.fix_type || "N/A"} | sats ${s.gps.satellites ?? gpsDetails.satellites ?? "N/A"} | HDOP ${s.gps.hdop ?? gpsDetails.hdop ?? "N/A"} | lat ${fmt(s.latitude, 6)} | lon ${fmt(s.longitude, 6)} | GPS MSL ${fmt(s.gps_altitude, 1, " m")} | speed ${fmt(s.gps.speed_mps, 1, " m/s")} | course ${fmt(s.gps.course_deg, 1, " deg")} | age ${fmt(s.navigation.gps_age_ms, 0, " ms")}`;
   document.getElementById("navigation").textContent = `${s.navigation.mode} | pos ${s.navigation.position_quality} | head ${s.navigation.heading_quality} | alt ${s.navigation.altitude_quality} | est ${fmt(s.navigation.latitude, 6)}, ${fmt(s.navigation.longitude, 6)} | N/E ${fmt(s.navigation.north_m, 1, " m")}, ${fmt(s.navigation.east_m, 1, " m")} | VN/VE ${fmt(s.navigation.vn_mps, 1, " m/s")}, ${fmt(s.navigation.ve_mps, 1, " m/s")} | gs ${fmt(s.navigation.ground_speed_mps, 1, " m/s")} | course ${fmt(s.navigation.course_deg, 1, " deg")} | heading ${fmt(s.navigation.heading_deg, 1, " deg")} | alt ${fmt(s.navigation.altitude_m, 1, " m")} | GPS error ${fmt(s.navigation.gps_position_error_m, 1, " m")} | rejected ${s.navigation.gps_rejected} ${s.navigation.gps_rejection_reason} | DR ${s.navigation.dead_reckoning_active} ${fmt(s.navigation.dead_reckoning_age_s, 1, " s")} | recovery ${s.navigation.recovery_active} | safe ${s.navigation.safe_for_guidance}`;
