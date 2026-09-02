@@ -157,19 +157,22 @@ class FlightComputer:
 
         self.shared = shared
         self.dt = 0.05  # 20 Hz loop
-        self.use_simulator = use_simulator if shared is None else False
 
         if self.shared is not None:
             # ---------------------------------------------------------------
             # Garuda_TARSR INTEGRATED mode — hardware is managed by the
             # sensor worker threads; we just read from SharedData.
+            # IMPORTANT: disable use_simulator so the SITL run-loop block
+            # (which needs sim_wind / sim_dynamics) is never entered.
             # ---------------------------------------------------------------
+            self.use_simulator = False
             log.info("--> INTEGRATED (SharedData) Mode ACTIVE")
             self.imu    = SharedIMU(self.shared)
             self.baro   = SharedBaro(self.shared)
             self.gps    = SharedGPS(self.shared)
             self.servos = SharedServos(self.shared)
-        elif self.use_simulator:
+        elif use_simulator:
+            self.use_simulator = True
             log.info("--> Software-In-The-Loop (SITL) Mode ACTIVE")
             from sim.dynamics import GliderDynamics
             from sim.wind_model import WindModel
@@ -183,6 +186,7 @@ class FlightComputer:
             self.gps    = SITL_GPS(self.sim_hw)
             self.servos = SITL_Servos(self.sim_hw)
         else:
+            self.use_simulator = False
             log.info("--> REAL FLIGHT Mode ACTIVE")
             from sensors.drivers import BNO085, BMP388, GPS, INA219
             from hw_interface.real_hardware import RealHardware

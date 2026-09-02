@@ -94,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
              "baseline is corrected to true ground level. Example: --drop-height 36",
     )
 
-    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping", "navigation_estimator"):
+    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping", "navigation_estimator", "glider_servos"):
         flag = name.replace("_", "-")
         parser.add_argument(f"--enable-{flag}", action="store_true", help=f"Enable {name}.")
         parser.add_argument(f"--disable-{flag}", action="store_true", help=f"Disable {name}.")
@@ -111,7 +111,7 @@ def apply_runtime_overrides(args: argparse.Namespace) -> None:
     if args.test_mode:
         config.PAUSE_STATE_TRANSITIONS = not args.auto_transitions
 
-    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping", "navigation_estimator"):
+    for name in ("gps", "imu", "barometer", "camera", "gimbal", "telemetry", "logging", "mapping", "navigation_estimator", "glider_servos"):
         enable = getattr(args, f"enable_{name}")
         disable = getattr(args, f"disable_{name}")
         if enable and disable:
@@ -404,6 +404,13 @@ def main() -> None:
     )
     if _drop_height > 0.0:
         logger.info("[GNC] Drop-height correction active: %.1f m offset applied to ground altitude", _drop_height)
+
+    # Glider hardware servos
+    if getattr(config, "ENABLE_GLIDER_SERVOS", True):
+        from gnc.glider_servo_worker import glider_servo_worker
+        thread_mgr.register(
+            ManagedThread("GliderServos", lambda evt: glider_servo_worker(shared, evt))
+        )
 
     if config.ENABLE_LOGGING:
         data_logger = DataLogger(shared)
