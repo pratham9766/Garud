@@ -56,7 +56,15 @@ def norm(v: tuple[float, float, float]) -> float:
 
 
 def sea_level_pressure(pressure_hpa: float, altitude_m: float) -> float:
-    return pressure_hpa / ((1.0 - altitude_m / 44330.0) ** 5.255)
+    pressure = float(pressure_hpa)
+    if not config.BAROMETER_PRESSURE_MIN_HPA <= pressure <= config.BAROMETER_PRESSURE_MAX_HPA:
+        raise ValueError(f"Cannot calibrate from invalid pressure: {pressure:.2f} hPa")
+    sea_level = pressure / ((1.0 - altitude_m / 44330.0) ** 5.255)
+    if not config.BAROMETER_SEA_LEVEL_MIN_HPA <= sea_level <= config.BAROMETER_SEA_LEVEL_MAX_HPA:
+        raise ValueError(
+            f"Calculated sea-level pressure outside safe range: {sea_level:.2f} hPa"
+        )
+    return sea_level
 
 
 def main() -> int:
@@ -164,7 +172,12 @@ def main() -> int:
     mag_offset = tuple((mag_min[i] + mag_max[i]) * 0.5 for i in range(3))
     pressure_mean = statistics.fmean(pressure_samples) if pressure_samples else 0.0
     temp_mean = statistics.fmean(temp_samples) if temp_samples else 0.0
-    sea_level_hpa = sea_level_pressure(pressure_mean, args.ground_altitude_m) if pressure_mean else 1013.25
+    try:
+        sea_level_hpa = sea_level_pressure(pressure_mean, args.ground_altitude_m) if pressure_mean else 1013.25
+    except ValueError as exc:
+        result("FAIL", str(exc))
+        write_log("calibrate_sensors.log", log_lines + [f"FAIL: {exc}"])
+        return 1
 
     gyro_bias_dps = tuple(math.degrees(v) for v in gyro_bias)
     accel_norm = norm(accel_mean)

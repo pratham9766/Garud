@@ -53,7 +53,7 @@ HTML = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GARUDA Ground Station</title>
+<title>Garud Dashboard</title>
 <style>
 :root {
   color-scheme: dark;
@@ -198,7 +198,7 @@ th { color: #98a6b8; font-weight: 650; }
 <body>
 <header>
   <div>
-    <h1>GARUDA Ground Station</h1>
+    <h1>Garud Dashboard</h1>
     <div class="topline">
       <span class="pill" id="mode">mode --</span>
       <span class="pill" id="state">Current State --</span>
@@ -1396,7 +1396,7 @@ def make_handler(shared: SharedData, control: DashboardControl, data_logger: Dat
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Temporary GARUDA browser ground station.")
+    parser = argparse.ArgumentParser(description="Garud Dashboard for browser-based payload testing.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--mock", action="store_true", help="Use mock hardware for a dry run.")
@@ -1492,14 +1492,14 @@ def main() -> int:
 
     shown_host = "localhost" if args.host in {"0.0.0.0", "127.0.0.1"} else args.host
     shown_port = int(server.server_address[1])
-    logger.info("GARUDA ground station running at http://%s:%d", shown_host, shown_port)
+    logger.info("Garud Dashboard running at http://%s:%d", shown_host, shown_port)
     logger.info("Use Ctrl+C to stop and close the test log cleanly.")
     deadline = None if args.duration <= 0 else time.monotonic() + args.duration
     try:
         while deadline is None or time.monotonic() < deadline:
             server.handle_request()
     except KeyboardInterrupt:
-        logger.info("Stopping ground station.")
+        logger.info("Stopping Garud Dashboard.")
     finally:
         stop_event.set()
         server.server_close()

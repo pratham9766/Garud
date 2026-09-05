@@ -74,6 +74,9 @@ def barometer_sea_level_pressure(calibration: Calibration) -> float | None:
     if not isinstance(baro_cal, dict):
         return None
     try:
-        return float(baro_cal["sea_level_pressure_hpa"])
+        pressure = float(baro_cal["sea_level_pressure_hpa"])
     except (KeyError, TypeError, ValueError):
         return None
+    if not config.BAROMETER_SEA_LEVEL_MIN_HPA <= pressure <= config.BAROMETER_SEA_LEVEL_MAX_HPA:
+        return None
+    return pressure
